@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter notebook checkpoints
+**/.ipynb_checkpoints/
+
+# Jupyter runtime
+.jupyter/
+.ipython/
+
+# VS Code configuration
+.vscode/
+
+# OS-specific cruft
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Python packaging / build artifacts
+build/
+dist/
+*.egg-info/
+
+# Coverage / test stuff
+.coverage
+htmlcov/
+.pytest_cache/
