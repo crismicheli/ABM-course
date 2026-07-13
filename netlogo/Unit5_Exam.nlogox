@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.4" snapToGrid="true">
   <code><![CDATA[
+
 extensions [nw]
 
 ; =========================================================
@@ -17,6 +18,12 @@ globals [
   ;;n-tissue
   external-temperature
   background-noise-level
+
+  ;; UI toggles for link visibility
+  show-tissue-links
+  show-imaginal-links
+  show-organizer-links
+  show-debris-links
 
   ;; fixed / code-side parameter
   initial-energy-per-cell
@@ -126,6 +133,7 @@ to setup
   clear-all
   reset-ticks
 
+  sync-legacy-interface-toggles
   setup-globals
   validate-setup
   derive-agent-counts-from-tissue
@@ -134,32 +142,25 @@ to setup
   assign-initial-agent-sizes
   seed-all-agent-clusters
   build-initial-network-topologies
+  update-link-visibility
   initialize-graph-agents
   update-global-metrics
   initialize-stabilization-memory
 end
 
 to setup-globals
-  ;; do not assign slider-backed globals here:
-  ;; initial-total-occupied-cells
-  ;; n-tissue
-  ;; external-temperature
-  ;; background-noise-level
+  sync-legacy-interface-toggles
 
   set initial-energy-per-cell 10
-
-  ;; ratios relative to tissue count
   set imaginal-count-ratio 0.67
   set organizer-count-ratio 0.33
   set debris-count-ratio 0.33
 
-  ;; cell-mass proportions by type
   set prop-tissue 0.60
   set prop-imaginal 0.20
   set prop-organizer 0.10
   set prop-debris 0.10
 
-  ;; outputs / bookkeeping
   set cumulative-background-heat 0
   set cumulative-erasure-heat 0
   set heat-ratio 0
@@ -240,7 +241,6 @@ to assign-initial-agent-sizes
   set initial-imaginal-cells round (initial-total-occupied-cells * prop-imaginal)
   set initial-organizer-cells round (initial-total-occupied-cells * prop-organizer)
 
-  ;; assign exact remainder to debris so totals always sum exactly
   set initial-debris-cells
     initial-total-occupied-cells -
     initial-tissue-cells -
@@ -256,7 +256,6 @@ end
 to allocate-type-budget [kind total-budget]
   let agents-of-kind sort graph-agents with [agent-kind = kind]
   let n length agents-of-kind
-
   if n = 0 [ stop ]
 
   let base floor (total-budget / n)
@@ -286,9 +285,7 @@ to seed-one-agent-cluster [g]
   if seed = nobody [ stop ]
 
   ask seed [
-    sprout-cells 1 [
-      initialize-cell-for-agent g
-    ]
+    sprout-cells 1 [ initialize-cell-for-agent g ]
     set occupied? true
   ]
 
@@ -305,9 +302,7 @@ to seed-one-agent-cluster [g]
     if not any? available [ stop ]
 
     ask one-of available [
-      sprout-cells 1 [
-        initialize-cell-for-agent g
-      ]
+      sprout-cells 1 [ initialize-cell-for-agent g ]
       set occupied? true
     ]
 
@@ -340,12 +335,16 @@ to recolor-cell
   if agent-kind = "debris"    [ set color gray ]
 end
 
+; ---------------------------------------------------------
+; NETWORK TOPOLOGIES
+; ---------------------------------------------------------
+
 to build-initial-network-topologies
   foreach sort graph-agents [ g ->
     let kind [agent-kind] of g
     if kind = "tissue"    [ build-tissue-small-world g ]
     if kind = "imaginal"  [ build-imaginal-spatial-small-world g ]
-    if kind = "organizer" [ build-organizer-hub-network g ]
+    if kind = "organizer" [ build-organizer-network g ]
     if kind = "debris"    [ build-debris-random-network g ]
   ]
   set initial-link-count count cell-links
@@ -357,9 +356,8 @@ to build-tissue-small-world [g]
   ask nodes [
     let my-agent-id agent-id
     let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
-    
     ask local-mates [
-      ensure-link-with myself "reciprocal" (0.6 + random-float 0.4)
+      ensure-internal-link-with myself "reciprocal" (0.6 + random-float 0.4)
     ]
   ]
 
@@ -371,9 +369,7 @@ to build-tissue-small-world [g]
       not link-neighbor? a
     ]
     if a != nobody and b != nobody [
-      ask a [
-        ensure-link-with b "shortcut" (0.4 + random-float 0.4)
-      ]
+      ask a [ ensure-internal-link-with b "shortcut" (0.4 + random-float 0.4) ]
     ]
   ]
 end
@@ -384,51 +380,55 @@ to build-imaginal-spatial-small-world [g]
   ask nodes [
     let my-agent-id agent-id
     let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
-    
     ask local-mates [
-      ensure-link-with myself "reciprocal" (0.7 + random-float 0.3)
+      ensure-internal-link-with myself "patterning" (0.7 + random-float 0.25)
     ]
   ]
 
-  let extra-links max list 1 round (count nodes * 0.08)
+  let extra-links max list 1 round (count nodes * 0.18)
   repeat extra-links [
     let a one-of nodes
     let b one-of other nodes with [
       agent-id = [agent-id] of g and
-      distance a > 2 and
+      distance a > 1 and
       not link-neighbor? a
     ]
     if a != nobody and b != nobody [
-      ask a [
-        ensure-link-with b "patterning" (0.5 + random-float 0.3)
-      ]
+      ask a [ ensure-internal-link-with b "patterning" (0.5 + random-float 0.3) ]
     ]
   ]
 end
 
-to build-organizer-hub-network [g]
+to build-organizer-network [g]
   let nodes graph-cells g
   if not any? nodes [ stop ]
 
   let hub max-one-of nodes [count other nodes in-radius 2]
 
   ask nodes with [self != hub] [
-    ask hub [
-      ensure-link-with myself "signal" (0.7 + random-float 0.3)
-    ]
+    ask hub [ ensure-internal-link-with myself "signal" (0.7 + random-float 0.3) ]
   ]
 
-  let extra-links max list 1 floor (count nodes / 3)
-  repeat extra-links [
+  let internal-extra max list 1 floor (count nodes / 4)
+  repeat internal-extra [
     let a one-of nodes
     let b one-of other nodes with [
       agent-id = [agent-id] of g and
       not link-neighbor? a
     ]
     if a != nobody and b != nobody [
-      ask a [
-        ensure-link-with b "signal" (0.4 + random-float 0.3)
-      ]
+      ask a [ ensure-internal-link-with b "signal" (0.4 + random-float 0.3) ]
+    ]
+  ]
+
+  let external-targets cells with [agent-id != [agent-id] of g]
+  let outward-attempts max list 1 round (count nodes * 0.5)
+
+  repeat outward-attempts [
+    let a one-of nodes
+    let b one-of external-targets with [not link-neighbor? a]
+    if a != nobody and b != nobody [
+      ask a [ ensure-cross-link-with b "signal" (0.25 + random-float 0.25) ]
     ]
   ]
 end
@@ -438,22 +438,93 @@ to build-debris-random-network [g]
   if count nodes < 2 [ stop ]
 
   ask nodes [
-    let partners n-of (random 3) other nodes with [not link-neighbor? myself]
-    ask partners [
-      ensure-link-with myself "residual" (0.2 + random-float 0.3)
+    let partner-pool other nodes with [
+      agent-id = [agent-id] of myself and
+      not link-neighbor? myself
+    ]
+    if any? partner-pool [
+      let partner-count min list (random 3) (count partner-pool)
+      if partner-count > 0 [
+        let partners n-of partner-count partner-pool
+        ask partners [
+          ensure-internal-link-with myself "residual" (0.2 + random-float 0.3)
+        ]
+      ]
     ]
   ]
 end
 
-to ensure-link-with [target ltype lstrength]
-  if target != nobody and target != self and not link-neighbor? target [
-    create-cell-link-with target [
-      set link-type ltype
-      set link-strength lstrength
-      set erasure-flag false
-      set color gray
+to ensure-internal-link-with [target ltype lstrength]
+  if target = nobody [ stop ]
+  if target = self [ stop ]
+  if link-neighbor? target [ stop ]
+  if [agent-id] of target != agent-id [ stop ]
+
+  create-cell-link-with target [
+    set link-type ltype
+    set link-strength lstrength
+    set erasure-flag false
+    recolor-link
+    set hidden? (not link-visible? self)
+  ]
+end
+
+to ensure-cross-link-with [target ltype lstrength]
+  if target = nobody [ stop ]
+  if target = self [ stop ]
+  if link-neighbor? target [ stop ]
+  if [agent-id] of target = agent-id [ stop ]
+
+  create-cell-link-with target [
+    set link-type ltype
+    set link-strength lstrength
+    set erasure-flag false
+    recolor-link
+    set hidden? (not link-visible? self)
+  ]
+end
+
+to recolor-link
+  if member? link-type ["reciprocal" "shortcut"] [ set color green ]
+  if link-type = "patterning" [ set color blue ]
+  if link-type = "signal" [ set color red ]
+  if link-type = "residual" [ set color gray ]
+end
+
+to-report link-visible? [lnk]
+  let link-kind [link-type] of lnk
+  if member? link-kind ["reciprocal" "shortcut"] [ report show-tissue-links ]
+  if link-kind = "patterning" [ report show-imaginal-links ]
+  if link-kind = "signal" [ report show-organizer-links ]
+  if link-kind = "residual" [ report show-debris-links ]
+  report true
+end
+
+to update-link-visibility
+  sync-legacy-interface-toggles
+  ask cell-links [
+    recolor-link
+    set hidden? (not link-visible? self)
+  ]
+  display
+end
+
+to refresh-links
+  sync-legacy-interface-toggles
+  if any? cell-links [
+    ask cell-links [
+      recolor-link
+      set hidden? (not link-visible? self)
     ]
   ]
+  display
+end
+
+to sync-legacy-interface-toggles
+  set show-tissue-links l-tissue
+  set show-imaginal-links l-imaginal
+  set show-organizer-links l-organizer
+  set show-debris-links l-debris
 end
 
 to initialize-graph-agents
@@ -496,6 +567,7 @@ to go
   irreversible-actions
   debris-and-organizer-updates
   heat-and-information-bookkeeping
+  update-link-visibility
 
   tick
   set tick-counter ticks
@@ -538,7 +610,10 @@ to tissue-explore [g]
     ]
   ]
 
-  ask graph-links g [
+  ask ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g
+  ]) [
     set link-strength clamp01 (link-strength + random-float 0.10 - 0.05)
   ]
 end
@@ -552,13 +627,19 @@ to imaginal-grow [g]
     ]
   ]
 
-  ask graph-links g [
+  ask ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g
+  ]) [
     set link-strength clamp01 (link-strength + random-float 0.08 - 0.04)
   ]
 end
 
 to debris-persist [g]
-  ask graph-links g [
+  ask ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g
+  ]) [
     set link-strength clamp01 (link-strength - random-float 0.02)
   ]
 end
@@ -648,7 +729,11 @@ to irreversible-actions
 end
 
 to tissue-prune [g]
-  let doomed graph-links g with [link-strength < 0.3]
+  let doomed ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g and
+    link-strength < 0.3
+  ])
   let n count doomed
 
   ask doomed [
@@ -665,7 +750,11 @@ to tissue-prune [g]
 end
 
 to imaginal-commit [g]
-  let doomed graph-links g with [link-strength < 0.4]
+  let doomed ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g and
+    link-strength < 0.4
+  ])
   let n count doomed
 
   ask doomed [
@@ -750,7 +839,11 @@ to debris-update [g]
 end
 
 to debris-breakdown [g]
-  let edges graph-links g
+  let edges ((graph-links g) with [
+    [agent-id] of end1 = [agent-id] of g and
+    [agent-id] of end2 = [agent-id] of g
+  ])
+
   if any? edges [
     ask one-of edges [
       set erasure-flag true
@@ -850,19 +943,17 @@ end
 
 to-report graph-links [g]
   report cell-links with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g
+    ([agent-id] of end1 = [agent-id] of g) or
+    ([agent-id] of end2 = [agent-id] of g)
   ]
 end
 
 to-report estimate-graph-entropy [nodes edges]
-  ;; placeholder entropy surrogate
   if not any? nodes [ report 0 ]
   report ((count nodes) + (count edges)) * 0.01
 end
 
 to-report landauer-cost [n-erased]
-  ;; placeholder coarse-grained erasure heat
   report n-erased * external-temperature
 end
 
@@ -873,16 +964,14 @@ end]]></code>
     <view x="545" wrappingAllowedX="true" y="5" frameRate="30.0" minPycor="-16" height="434" showTickCounter="true" patchSize="13.0" fontSize="10" wrappingAllowedY="true" width="434" tickCounterLabel="ticks" maxPycor="16" updateMode="0" maxPxcor="16" minPxcor="-16"></view>
     <slider x="15" step="10" y="5" max="400" width="190" display="initial-total-occupied-cells" height="50" min="40" direction="Horizontal" default="400.0" variable="initial-total-occupied-cells"></slider>
     <slider x="213" step="1" y="5" max="8" width="150" display="n-tissue" height="50" min="1" direction="Horizontal" default="8.0" variable="n-tissue"></slider>
-    <slider x="370" step="2" y="5" max="40" width="155" display="temperature" height="50" min="20" direction="Horizontal" default="25.0" variable="temperature"></slider>
-    <slider x="15" step="0.1" y="60" max="1" width="150" display="noise" height="50" min="0" direction="Horizontal" default="0.5" variable="noise"></slider>
-    <slider x="170" step="0.1" y="60" max="1" width="150" display="cells-energy" height="50" min="0" direction="Horizontal" default="0.5" variable="cells-energy"></slider>
+    <slider x="370" step="2" y="5" max="40" width="155" display="temperature" height="50" min="20" direction="Horizontal" default="40.0" variable="temperature"></slider>
+    <slider x="15" step="0.1" y="60" max="1" width="150" display="noise" height="50" min="0" direction="Horizontal" default="1.0" variable="noise"></slider>
+    <slider x="170" step="0.1" y="60" max="1" width="150" display="cells-energy" height="50" min="0" direction="Horizontal" default="0.7" variable="cells-energy"></slider>
     <button x="15" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="135" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="reset">reset</button>
     <button x="75" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="go">go</button>
-    <switch x="215" y="115" height="40" on="true" variable="organizer" width="90" display="organizer"></switch>
-    <switch x="15" y="115" height="40" on="true" variable="links tissue" width="100" display="links tissue"></switch>
-    <switch x="125" y="115" height="40" on="true" variable="imaginal" width="80" display="imaginal"></switch>
-    <switch x="315" y="115" height="40" on="false" variable="debris" width="75" display="debris"></switch>
+    <switch x="215" y="115" height="40" on="true" variable="l-organizer" width="91" display="l-organizer"></switch>
+    <switch x="315" y="115" height="40" on="false" variable="l-debris" width="75" display="l-debris"></switch>
     <monitor x="1005" precision="17" y="10" height="60" fontSize="11" width="100" display="Cell counts">0</monitor>
     <monitor x="1115" precision="17" y="10" height="60" fontSize="11" width="100" display="Links">0</monitor>
     <plot x="1005" autoPlotX="true" yMax="10.0" autoPlotY="true" y="95" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="230" display="Heat balance">
@@ -893,6 +982,9 @@ end]]></code>
         <update>plot count turtles</update>
       </pen>
     </plot>
+    <switch x="15" y="115" height="40" on="true" variable="l-tissue" width="100" display="l-tissue"></switch>
+    <switch x="125" y="115" height="40" on="false" variable="l-imaginal" width="86" display="l-imaginal"></switch>
+    <button x="405" y="115" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="100">refresh-links</button>
   </widgets>
   <info>## WHAT IS IT?
 
