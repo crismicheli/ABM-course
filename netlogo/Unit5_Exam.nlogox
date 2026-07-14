@@ -1,79 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.4" snapToGrid="true">
   <code><![CDATA[
-
 extensions [nw]
 
 ; =========================================================
 ; Metamorphosis / information-erasure model
 ; Consistent initialization scaffold
 ; Based on the Concept document
+; Revised: agent-specific irreversible logic + deterministic tissue absorption
 ; =========================================================
 
 globals [
-  tick-counter
+tick-counter
+target-tissue-absorbed-cells
+absorbed-tissue-cells
+tissue-dissolve-rate
+organizer-conversion-fraction
+leftover-tissue-cells
+target-organizer-converted-cells
+organizer-converted-cells
 
-  ;; user-facing controls (slider-backed in Interface)
-  ;;initial-total-occupied-cells
-  ;;n-tissue
-  external-temperature
-  background-noise-level
+;; user-facing controls (slider-backed in Interface)
+;;initial-total-occupied-cells
+;;n-tissue
+external-temperature
+background-noise-level
 
-  ;; UI toggles for link visibility
-  show-tissue-links
-  show-imaginal-links
-  show-organizer-links
-  show-debris-links
+;; UI toggles for link visibility
+show-tissue-links
+show-imaginal-links
+show-organizer-links
+show-debris-links
 
-  ;; fixed / code-side parameter
-  initial-energy-per-cell
+;; fixed / code-side parameter
+initial-energy-per-cell
 
-  ;; derived agent counts
-  n-imaginal
-  n-organizer
-  n-debris
+;; derived agent counts
+n-imaginal
+n-organizer
+n-debris
 
-  ;; count ratios relative to n-tissue
-  imaginal-count-ratio
-  organizer-count-ratio
-  debris-count-ratio
+;; count ratios relative to n-tissue
+imaginal-count-ratio
+organizer-count-ratio
+debris-count-ratio
 
-  ;; fixed cell allocation proportions
-  prop-tissue
-  prop-imaginal
-  prop-organizer
-  prop-debris
+;; fixed cell allocation proportions
+prop-tissue
+prop-imaginal
+prop-organizer
+prop-debris
 
-  ;; derived initial cell budgets by type
-  initial-tissue-cells
-  initial-imaginal-cells
-  initial-organizer-cells
-  initial-debris-cells
+;; derived initial cell budgets by type
+initial-tissue-cells
+initial-imaginal-cells
+initial-organizer-cells
+initial-debris-cells
 
-  ;; global baselines
-  initial-occupied-cells
-  initial-link-count
+;; global baselines
+initial-occupied-cells
+initial-link-count
 
-  ;; global outputs
-  total-occupied-cells
-  link-density
-  global-graph-entropy
-  cumulative-background-heat
-  cumulative-erasure-heat
-  heat-ratio
-  signed-cell-diff-total
+;; global outputs
+total-occupied-cells
+link-density
+global-graph-entropy
+cumulative-background-heat
+cumulative-erasure-heat
+heat-ratio
+signed-cell-diff-total
 
-  ;; stabilization memory
-  previous-total-occupied-cells
-  previous-link-density
-  previous-global-graph-entropy
-  previous-heat-ratio
-
-  structural-stable?
-  irreversible-stable?
-  heat-stable?
-
-  irreversible-events-this-tick
+;; stabilization memory
+previous-total-occupied-cells
+previous-link-density
+previous-global-graph-entropy
+previous-heat-ratio
+structural-stable?
+irreversible-stable?
+heat-stable?
+irreversible-events-this-tick
 ]
 
 breed [cells cell]
@@ -81,48 +86,47 @@ breed [graph-agents graph-agent]
 undirected-link-breed [cell-links cell-link]
 
 patches-own [
-  occupied?
+occupied?
 ]
 
 cells-own [
-  agent-id
-  agent-kind
-  cell-type
-
-  local-state
-  noise-level
-  energy-budget
-
-  stress
-  patterning-score
-  commitment-bias
+agent-id
+origin-agent-id
+agent-kind
+cell-type
+local-state
+noise-level
+energy-budget
+stress
+patterning-score
+commitment-bias
 ]
 
 cell-links-own [
-  link-type
-  link-strength
-  erasure-flag
+link-type
+link-strength
+erasure-flag
 ]
 
 graph-agents-own [
-  agent-id
-  agent-kind
-  fsm-state
+agent-id
+agent-kind
+fsm-state
 
-  target-initial-cells
+target-initial-cells
 
-  graph-size
-  graph-entropy
-  erased-links-count
-  landauer-heat
-  background-heat
+graph-size
+graph-entropy
+erased-links-count
+landauer-heat
+background-heat
 
-  pruning-level
-  commitment-score
-  organizer-activity
-  cleanup-score
+pruning-level
+commitment-score
+organizer-activity
+cleanup-score
 
-  initial-cell-count
+initial-cell-count
 ]
 
 ; ---------------------------------------------------------
@@ -130,209 +134,215 @@ graph-agents-own [
 ; ---------------------------------------------------------
 
 to setup
-  clear-all
-  reset-ticks
+clear-all
+reset-ticks
 
-  sync-legacy-interface-toggles
-  setup-globals
-  validate-setup
-  derive-agent-counts-from-tissue
-  setup-patches
-  setup-graph-agents
-  assign-initial-agent-sizes
-  seed-all-agent-clusters
-  build-initial-network-topologies
-  update-link-visibility
-  initialize-graph-agents
-  update-global-metrics
-  initialize-stabilization-memory
+sync-legacy-interface-toggles
+setup-globals
+validate-setup
+derive-agent-counts-from-tissue
+setup-patches
+setup-graph-agents
+assign-initial-agent-sizes
+seed-all-agent-clusters
+build-initial-network-topologies
+update-link-visibility
+initialize-graph-agents
+update-global-metrics
+initialize-stabilization-memory
 end
 
 to setup-globals
-  sync-legacy-interface-toggles
-
-  set initial-energy-per-cell 10
-  set imaginal-count-ratio 0.67
-  set organizer-count-ratio 0.33
-  set debris-count-ratio 0.33
-
-  set prop-tissue 0.60
-  set prop-imaginal 0.20
-  set prop-organizer 0.10
-  set prop-debris 0.10
-
-  set cumulative-background-heat 0
-  set cumulative-erasure-heat 0
-  set heat-ratio 0
-  set signed-cell-diff-total 0
-
-  set structural-stable? false
-  set irreversible-stable? false
-  set heat-stable? false
-  set irreversible-events-this-tick 0
+sync-legacy-interface-toggles
+set initial-energy-per-cell 10
+set imaginal-count-ratio 0.67
+set organizer-count-ratio 0.33
+set debris-count-ratio 0.33
+set prop-tissue 0.60
+set prop-imaginal 0.20
+set prop-organizer 0.10
+set prop-debris 0.10
+set tissue-dissolve-rate 0.05
+set organizer-conversion-fraction 0.50
+set target-tissue-absorbed-cells 0
+set absorbed-tissue-cells 0
+set target-organizer-converted-cells 0
+set organizer-converted-cells 0
+set cumulative-background-heat 0
+set cumulative-erasure-heat 0
+set heat-ratio 0
+set signed-cell-diff-total 0
+set structural-stable? false
+set irreversible-stable? false
+set heat-stable? false
+set irreversible-events-this-tick 0
 end
 
 to validate-setup
-  if initial-total-occupied-cells <= 0 [
-    user-message "initial-total-occupied-cells must be > 0"
-    stop
-  ]
+if initial-total-occupied-cells <= 0 [
+user-message "initial-total-occupied-cells must be > 0"
+stop
+]
 
-  if n-tissue <= 0 [
-    user-message "n-tissue must be > 0"
-    stop
-  ]
+if n-tissue <= 0 [
+user-message "n-tissue must be > 0"
+stop
+]
 
-  if initial-total-occupied-cells > count patches [
-    user-message "initial-total-occupied-cells exceeds number of patches"
-    stop
-  ]
+if initial-total-occupied-cells > count patches [
+user-message "initial-total-occupied-cells exceeds number of patches"
+stop
+]
 end
 
 to derive-agent-counts-from-tissue
-  set n-imaginal max list 1 round (n-tissue * imaginal-count-ratio)
-  set n-organizer max list 1 round (n-tissue * organizer-count-ratio)
-  set n-debris    max list 1 round (n-tissue * debris-count-ratio)
+set n-imaginal max list 1 round (n-tissue * imaginal-count-ratio)
+set n-organizer max list 1 round (n-tissue * organizer-count-ratio)
+set n-debris max list 1 round (n-tissue * debris-count-ratio)
 end
 
 to setup-patches
-  ask patches [
-    set occupied? false
-    set pcolor black + 2
-  ]
+ask patches [
+set occupied? false
+set pcolor black + 2
+]
 end
 
 to setup-graph-agents
-  create-graph-agents n-tissue [
-    set agent-id who
-    set agent-kind "tissue"
-    set fsm-state "reversible"
-    set target-initial-cells 0
-    hide-turtle
-  ]
+create-graph-agents n-tissue [
+set agent-id who
+set agent-kind "tissue"
+set fsm-state "reversible"
+set target-initial-cells 0
+hide-turtle
+]
 
-  create-graph-agents n-imaginal [
-    set agent-id who
-    set agent-kind "imaginal"
-    set fsm-state "reversible"
-    set target-initial-cells 0
-    hide-turtle
-  ]
+create-graph-agents n-imaginal [
+set agent-id who
+set agent-kind "imaginal"
+set fsm-state "reversible"
+set target-initial-cells 0
+hide-turtle
+]
 
-  create-graph-agents n-organizer [
-    set agent-id who
-    set agent-kind "organizer"
-    set fsm-state "basal"
-    set target-initial-cells 0
-    hide-turtle
-  ]
+create-graph-agents n-organizer [
+set agent-id who
+set agent-kind "organizer"
+set fsm-state "basal"
+set target-initial-cells 0
+hide-turtle
+]
 
-  create-graph-agents n-debris [
-    set agent-id who
-    set agent-kind "debris"
-    set fsm-state "residual"
-    set target-initial-cells 0
-    hide-turtle
-  ]
+create-graph-agents n-debris [
+set agent-id who
+set agent-kind "debris"
+set fsm-state "residual"
+set target-initial-cells 0
+hide-turtle
+]
 end
 
 to assign-initial-agent-sizes
-  set initial-tissue-cells round (initial-total-occupied-cells * prop-tissue)
-  set initial-imaginal-cells round (initial-total-occupied-cells * prop-imaginal)
-  set initial-organizer-cells round (initial-total-occupied-cells * prop-organizer)
-
-  set initial-debris-cells
-    initial-total-occupied-cells -
-    initial-tissue-cells -
-    initial-imaginal-cells -
-    initial-organizer-cells
-
-  allocate-type-budget "tissue" initial-tissue-cells
-  allocate-type-budget "imaginal" initial-imaginal-cells
-  allocate-type-budget "organizer" initial-organizer-cells
-  allocate-type-budget "debris" initial-debris-cells
+set initial-tissue-cells round (initial-total-occupied-cells * prop-tissue)
+set initial-imaginal-cells round (initial-total-occupied-cells * prop-imaginal)
+set initial-organizer-cells round (initial-total-occupied-cells * prop-organizer)
+set initial-debris-cells initial-total-occupied-cells - initial-tissue-cells - initial-imaginal-cells - initial-organizer-cells
+set target-tissue-absorbed-cells round (initial-tissue-cells * tissue-absorbed)
+set target-organizer-converted-cells round (target-tissue-absorbed-cells * organizer-conversion-fraction)
+allocate-type-budget "tissue" initial-tissue-cells
+allocate-type-budget "imaginal" initial-imaginal-cells
+allocate-type-budget "organizer" initial-organizer-cells
+allocate-type-budget "debris" initial-debris-cells
 end
 
 to allocate-type-budget [kind total-budget]
-  let agents-of-kind sort graph-agents with [agent-kind = kind]
-  let n length agents-of-kind
-  if n = 0 [ stop ]
+let agents-of-kind sort graph-agents with [agent-kind = kind]
+let n length agents-of-kind
+if n = 0 [ stop ]
 
-  let base floor (total-budget / n)
-  let rmndr total-budget mod n
-  let i 0
+let base floor (total-budget / n)
+let rmndr total-budget mod n
+let i 0
 
-  foreach agents-of-kind [ g ->
-    ask g [
-      set target-initial-cells base + ifelse-value (i < rmndr) [1] [0]
-    ]
-    set i i + 1
-  ]
+foreach agents-of-kind [ g ->
+ask g [
+set target-initial-cells base + ifelse-value (i < rmndr) [1] [0]
+]
+set i i + 1
+]
 end
 
 to seed-all-agent-clusters
-  foreach sort graph-agents [ g ->
-    seed-one-agent-cluster g
-  ]
-  set initial-occupied-cells count cells
+foreach sort graph-agents [ g ->
+seed-one-agent-cluster g
+]
+set initial-occupied-cells count cells
 end
 
 to seed-one-agent-cluster [g]
-  let target [target-initial-cells] of g
-  if target <= 0 [ stop ]
+let target [target-initial-cells] of g
+if target <= 0 [ stop ]
 
-  let seed one-of patches with [not occupied?]
-  if seed = nobody [ stop ]
+let seed one-of patches with [not occupied?]
+if seed = nobody [ stop ]
 
-  ask seed [
-    sprout-cells 1 [ initialize-cell-for-agent g ]
-    set occupied? true
-  ]
+ask seed [
+sprout-cells 1 [ initialize-cell-for-agent g ]
+set occupied? true
+]
 
-  let placed 1
-  while [placed < target] [
-    let current-patches patch-set [patch-here] of cells with [agent-id = [agent-id] of g]
-    let frontier patch-set [neighbors] of current-patches
-    let available frontier with [not occupied?]
+let placed 1
+while [placed < target] [
+let current-patches patch-set [patch-here] of cells with [agent-id = [agent-id] of g]
+let frontier patch-set [neighbors] of current-patches
+let available frontier with [not occupied?]
 
-    if not any? available [
-      set available patches with [not occupied?]
-    ]
+if not any? available [
+set available patches with [not occupied?]
+]
 
-    if not any? available [ stop ]
+if not any? available [ stop ]
 
-    ask one-of available [
-      sprout-cells 1 [ initialize-cell-for-agent g ]
-      set occupied? true
-    ]
+ask one-of available [
+sprout-cells 1 [ initialize-cell-for-agent g ]
+set occupied? true
+]
 
-    set placed placed + 1
-  ]
+set placed placed + 1
+]
 end
 
 to initialize-cell-for-agent [g]
-  set agent-id [agent-id] of g
-  set agent-kind [agent-kind] of g
-  set cell-type [agent-kind] of g
-
-  set local-state 0
-  set noise-level background-noise-level
-  set energy-budget initial-energy-per-cell
-
-  set stress 0
-  set patterning-score 0
-  set commitment-bias 0
-
-  set shape "circle"
-  set size 0.7
-  recolor-cell
+set agent-id [agent-id] of g
+set origin-agent-id [agent-id] of g
+set agent-kind [agent-kind] of g
+set cell-type [agent-kind] of g
+set local-state 0
+set noise-level background-noise-level
+set energy-budget initial-energy-per-cell
+set stress 0
+set patterning-score 0
+set commitment-bias 0
+set shape "circle"
+set size 0.7
+recolor-cell
 end
 
 to recolor-cell
-  if agent-kind = "tissue"    [ set color green ]
-  if agent-kind = "imaginal"  [ set color blue ]
-  if agent-kind = "organizer" [ set color red ]
-  if agent-kind = "debris"    [ set color gray ]
+if agent-kind = "tissue" [
+ifelse stress < 0.25 [
+set color green
+]
+[ ifelse stress < 0.50 [
+set color yellow
+]
+[ set color orange ]
+]
+]
+
+if agent-kind = "imaginal" [ set color blue ]
+if agent-kind = "organizer" [ set color red ]
+if agent-kind = "debris" [ set color gray ]
 end
 
 ; ---------------------------------------------------------
@@ -340,214 +350,214 @@ end
 ; ---------------------------------------------------------
 
 to build-initial-network-topologies
-  foreach sort graph-agents [ g ->
-    let kind [agent-kind] of g
-    if kind = "tissue"    [ build-tissue-small-world g ]
-    if kind = "imaginal"  [ build-imaginal-spatial-small-world g ]
-    if kind = "organizer" [ build-organizer-network g ]
-    if kind = "debris"    [ build-debris-random-network g ]
-  ]
-  set initial-link-count count cell-links
+foreach sort graph-agents [ g ->
+let kind [agent-kind] of g
+if kind = "tissue" [ build-tissue-small-world g ]
+if kind = "imaginal" [ build-imaginal-spatial-small-world g ]
+if kind = "organizer" [ build-organizer-network g ]
+if kind = "debris" [ build-debris-random-network g ]
+]
+set initial-link-count count cell-links
 end
 
 to build-tissue-small-world [g]
-  let nodes graph-cells g
+let nodes graph-cells g
 
-  ask nodes [
-    let my-agent-id agent-id
-    let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
-    ask local-mates [
-      ensure-internal-link-with myself "reciprocal" (0.6 + random-float 0.4)
-    ]
-  ]
+ask nodes [
+let my-agent-id agent-id
+let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
+ask local-mates [
+ensure-internal-link-with myself "reciprocal" (0.6 + random-float 0.4)
+]
+]
 
-  let shortcut-attempts max list 1 round (count nodes * 0.1)
-  repeat shortcut-attempts [
-    let a one-of nodes
-    let b one-of other nodes with [
-      agent-id = [agent-id] of g and
-      not link-neighbor? a
-    ]
-    if a != nobody and b != nobody [
-      ask a [ ensure-internal-link-with b "shortcut" (0.4 + random-float 0.4) ]
-    ]
-  ]
+let shortcut-attempts max list 1 round (count nodes * 0.1)
+repeat shortcut-attempts [
+let a one-of nodes
+let b one-of other nodes with [
+agent-id = [agent-id] of g and
+not link-neighbor? a
+]
+if a != nobody and b != nobody [
+ask a [ ensure-internal-link-with b "shortcut" (0.4 + random-float 0.4) ]
+]
+]
 end
 
 to build-imaginal-spatial-small-world [g]
-  let nodes graph-cells g
+let nodes graph-cells g
 
-  ask nodes [
-    let my-agent-id agent-id
-    let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
-    ask local-mates [
-      ensure-internal-link-with myself "patterning" (0.7 + random-float 0.25)
-    ]
-  ]
+ask nodes [
+let my-agent-id agent-id
+let local-mates other (cells-on neighbors) with [agent-id = my-agent-id]
+ask local-mates [
+ensure-internal-link-with myself "patterning" (0.7 + random-float 0.25)
+]
+]
 
-  let extra-links max list 1 round (count nodes * 0.18)
-  repeat extra-links [
-    let a one-of nodes
-    let b one-of other nodes with [
-      agent-id = [agent-id] of g and
-      distance a > 1 and
-      not link-neighbor? a
-    ]
-    if a != nobody and b != nobody [
-      ask a [ ensure-internal-link-with b "patterning" (0.5 + random-float 0.3) ]
-    ]
-  ]
+let extra-links max list 1 round (count nodes * 0.18)
+repeat extra-links [
+let a one-of nodes
+let b one-of other nodes with [
+agent-id = [agent-id] of g and
+distance a > 1 and
+not link-neighbor? a
+]
+if a != nobody and b != nobody [
+ask a [ ensure-internal-link-with b "patterning" (0.5 + random-float 0.3) ]
+]
+]
 end
 
 to build-organizer-network [g]
-  let nodes graph-cells g
-  if not any? nodes [ stop ]
+let nodes graph-cells g
+if not any? nodes [ stop ]
 
-  let hub max-one-of nodes [count other nodes in-radius 2]
+let hub max-one-of nodes [count other nodes in-radius 2]
 
-  ask nodes with [self != hub] [
-    ask hub [ ensure-internal-link-with myself "signal" (0.7 + random-float 0.3) ]
-  ]
+ask nodes with [self != hub] [
+ask hub [ ensure-internal-link-with myself "signal" (0.7 + random-float 0.3) ]
+]
 
-  let internal-extra max list 1 floor (count nodes / 4)
-  repeat internal-extra [
-    let a one-of nodes
-    let b one-of other nodes with [
-      agent-id = [agent-id] of g and
-      not link-neighbor? a
-    ]
-    if a != nobody and b != nobody [
-      ask a [ ensure-internal-link-with b "signal" (0.4 + random-float 0.3) ]
-    ]
-  ]
+let internal-extra max list 1 floor (count nodes / 4)
+repeat internal-extra [
+let a one-of nodes
+let b one-of other nodes with [
+agent-id = [agent-id] of g and
+not link-neighbor? a
+]
+if a != nobody and b != nobody [
+ask a [ ensure-internal-link-with b "signal" (0.4 + random-float 0.3) ]
+]
+]
 
-  let external-targets cells with [agent-id != [agent-id] of g]
-  let outward-attempts max list 1 round (count nodes * 0.5)
+let external-targets cells with [agent-id != [agent-id] of g]
+let outward-attempts max list 1 round (count nodes * 0.5)
 
-  repeat outward-attempts [
-    let a one-of nodes
-    let b one-of external-targets with [not link-neighbor? a]
-    if a != nobody and b != nobody [
-      ask a [ ensure-cross-link-with b "signal" (0.25 + random-float 0.25) ]
-    ]
-  ]
+repeat outward-attempts [
+let a one-of nodes
+let b one-of external-targets with [not link-neighbor? a]
+if a != nobody and b != nobody [
+ask a [ ensure-cross-link-with b "signal" (0.25 + random-float 0.25) ]
+]
+]
 end
 
 to build-debris-random-network [g]
-  let nodes graph-cells g
-  if count nodes < 2 [ stop ]
+let nodes graph-cells g
+if count nodes < 2 [ stop ]
 
-  ask nodes [
-    let partner-pool other nodes with [
-      agent-id = [agent-id] of myself and
-      not link-neighbor? myself
-    ]
-    if any? partner-pool [
-      let partner-count min list (random 3) (count partner-pool)
-      if partner-count > 0 [
-        let partners n-of partner-count partner-pool
-        ask partners [
-          ensure-internal-link-with myself "residual" (0.2 + random-float 0.3)
-        ]
-      ]
-    ]
-  ]
+ask nodes [
+let partner-pool other nodes with [
+agent-id = [agent-id] of myself and
+not link-neighbor? myself
+]
+if any? partner-pool [
+let partner-count min list (random 3) (count partner-pool)
+if partner-count > 0 [
+let partners n-of partner-count partner-pool
+ask partners [
+ensure-internal-link-with myself "residual" (0.2 + random-float 0.3)
+]
+]
+]
+]
 end
 
 to ensure-internal-link-with [target ltype lstrength]
-  if target = nobody [ stop ]
-  if target = self [ stop ]
-  if link-neighbor? target [ stop ]
-  if [agent-id] of target != agent-id [ stop ]
+if target = nobody [ stop ]
+if target = self [ stop ]
+if link-neighbor? target [ stop ]
+if [agent-id] of target != agent-id [ stop ]
 
-  create-cell-link-with target [
-    set link-type ltype
-    set link-strength lstrength
-    set erasure-flag false
-    recolor-link
-    set hidden? (not link-visible? self)
-  ]
+create-cell-link-with target [
+set link-type ltype
+set link-strength lstrength
+set erasure-flag false
+recolor-link
+set hidden? (not link-visible? self)
+]
 end
 
 to ensure-cross-link-with [target ltype lstrength]
-  if target = nobody [ stop ]
-  if target = self [ stop ]
-  if link-neighbor? target [ stop ]
-  if [agent-id] of target = agent-id [ stop ]
+if target = nobody [ stop ]
+if target = self [ stop ]
+if link-neighbor? target [ stop ]
+if [agent-id] of target = agent-id [ stop ]
 
-  create-cell-link-with target [
-    set link-type ltype
-    set link-strength lstrength
-    set erasure-flag false
-    recolor-link
-    set hidden? (not link-visible? self)
-  ]
+create-cell-link-with target [
+set link-type ltype
+set link-strength lstrength
+set erasure-flag false
+recolor-link
+set hidden? (not link-visible? self)
+]
 end
 
 to recolor-link
-  if member? link-type ["reciprocal" "shortcut"] [ set color green ]
-  if link-type = "patterning" [ set color blue ]
-  if link-type = "signal" [ set color red ]
-  if link-type = "residual" [ set color gray ]
+if member? link-type ["reciprocal" "shortcut"] [ set color green ]
+if link-type = "patterning" [ set color blue ]
+if link-type = "signal" [ set color red ]
+if link-type = "residual" [ set color gray ]
 end
 
 to-report link-visible? [lnk]
-  let link-kind [link-type] of lnk
-  if member? link-kind ["reciprocal" "shortcut"] [ report show-tissue-links ]
-  if link-kind = "patterning" [ report show-imaginal-links ]
-  if link-kind = "signal" [ report show-organizer-links ]
-  if link-kind = "residual" [ report show-debris-links ]
-  report true
+let link-kind [link-type] of lnk
+if member? link-kind ["reciprocal" "shortcut"] [ report show-tissue-links ]
+if link-kind = "patterning" [ report show-imaginal-links ]
+if link-kind = "signal" [ report show-organizer-links ]
+if link-kind = "residual" [ report show-debris-links ]
+report true
 end
 
 to update-link-visibility
-  sync-legacy-interface-toggles
-  ask cell-links [
-    recolor-link
-    set hidden? (not link-visible? self)
-  ]
-  display
+sync-legacy-interface-toggles
+ask cell-links [
+recolor-link
+set hidden? (not link-visible? self)
+]
+display
 end
 
 to refresh-links
-  sync-legacy-interface-toggles
-  if any? cell-links [
-    ask cell-links [
-      recolor-link
-      set hidden? (not link-visible? self)
-    ]
-  ]
-  display
+sync-legacy-interface-toggles
+if any? cell-links [
+ask cell-links [
+recolor-link
+set hidden? (not link-visible? self)
+]
+]
+display
 end
 
 to sync-legacy-interface-toggles
-  set show-tissue-links l-tissue
-  set show-imaginal-links l-imaginal
-  set show-organizer-links l-organizer
-  set show-debris-links l-debris
+set show-tissue-links l-tissue
+set show-imaginal-links l-imaginal
+set show-organizer-links l-organizer
+set show-debris-links l-debris
 end
 
 to initialize-graph-agents
-  ask graph-agents [
-    set erased-links-count 0
-    set landauer-heat 0
-    set background-heat 0
-    set pruning-level 0
-    set commitment-score 0
-    set organizer-activity 0
-    set cleanup-score 0
+ask graph-agents [
+set erased-links-count 0
+set landauer-heat 0
+set background-heat 0
+set pruning-level 0
+set commitment-score 0
+set organizer-activity 0
+set cleanup-score 0
 
-    update-one-graph-agent-metrics self
-    set initial-cell-count count graph-cells self
-  ]
+update-one-graph-agent-metrics self
+set initial-cell-count count graph-cells self
+]
 end
 
 to initialize-stabilization-memory
-  set previous-total-occupied-cells total-occupied-cells
-  set previous-link-density link-density
-  set previous-global-graph-entropy global-graph-entropy
-  set previous-heat-ratio heat-ratio
-  set tick-counter 0
+set previous-total-occupied-cells total-occupied-cells
+set previous-link-density link-density
+set previous-global-graph-entropy global-graph-entropy
+set previous-heat-ratio heat-ratio
+set tick-counter 0
 end
 
 ; ---------------------------------------------------------
@@ -555,22 +565,24 @@ end
 ; ---------------------------------------------------------
 
 to go
-  if not any? graph-agents with [fsm-state != "removed" and fsm-state != "absorbed"] [
-    stop
-  ]
+if not any? graph-agents with [fsm-state != "removed" and fsm-state != "absorbed"] [
+stop
+]
 
-  set irreversible-events-this-tick 0
+set irreversible-events-this-tick 0
 
-  environment-update
-  reversible-local-updates
-  transition-checks
-  irreversible-actions
-  debris-and-organizer-updates
-  heat-and-information-bookkeeping
-  update-link-visibility
+environment-update
+reversible-local-updates
+transition-checks
+tissue-irreversible-actions
+imaginal-irreversible-actions
+organizer-irreversible-actions
+debris-irreversible-actions
+heat-and-information-bookkeeping
+update-link-visibility
 
-  tick
-  set tick-counter ticks
+tick
+set tick-counter ticks
 end
 
 ; ---------------------------------------------------------
@@ -578,9 +590,9 @@ end
 ; ---------------------------------------------------------
 
 to environment-update
-  ask cells [
-    set noise-level background-noise-level
-  ]
+ask cells [
+set noise-level background-noise-level
+]
 end
 
 ; ---------------------------------------------------------
@@ -588,60 +600,56 @@ end
 ; ---------------------------------------------------------
 
 to reversible-local-updates
-  ask graph-agents with [agent-kind = "tissue" and fsm-state = "reversible"] [
-    tissue-explore self
-  ]
+ask graph-agents with [agent-kind = "tissue" and fsm-state = "reversible"] [
+tissue-explore self
+]
 
-  ask graph-agents with [agent-kind = "imaginal" and fsm-state = "reversible"] [
-    imaginal-grow self
-  ]
+ask graph-agents with [agent-kind = "imaginal" and fsm-state = "reversible"] [
+imaginal-grow self
+]
 
-  ask graph-agents with [agent-kind = "debris" and fsm-state = "residual"] [
-    debris-persist self
-  ]
+ask graph-agents with [agent-kind = "debris" and fsm-state = "residual"] [
+debris-persist self
+]
 end
 
 to tissue-explore [g]
-  ask graph-cells g [
-    if random-float 1.0 < background-noise-level [
-      set local-state local-state + one-of [-1 1]
-      set stress max list 0 (stress + random-float external-temperature - (external-temperature / 2))
-      set energy-budget energy-budget - 0.01
-    ]
-  ]
+ask (graph-cells g) [
+if random-float 1.0 < background-noise-level [
+set local-state local-state + one-of [-1 1]
+set energy-budget energy-budget - 0.02
+]
+]
 
-  ask ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g
-  ]) [
-    set link-strength clamp01 (link-strength + random-float 0.10 - 0.05)
-  ]
+ask (graph-links g) [
+set link-strength clamp01 (link-strength - (0.03 + random-float 0.05))
+]
 end
 
 to imaginal-grow [g]
-  ask graph-cells g [
-    if random-float 1.0 < background-noise-level [
-      set patterning-score patterning-score + random-float 0.05
-      set commitment-bias commitment-bias + random-float 0.03
-      set energy-budget energy-budget - 0.01
-    ]
-  ]
+ask graph-cells g [
+if random-float 1.0 < background-noise-level [
+set patterning-score patterning-score + random-float 0.05
+set commitment-bias commitment-bias + random-float 0.03
+set energy-budget energy-budget - 0.01
+]
+]
 
-  ask ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g
-  ]) [
-    set link-strength clamp01 (link-strength + random-float 0.08 - 0.04)
-  ]
+ask ((graph-links g) with [
+[agent-id] of end1 = [agent-id] of g and
+[agent-id] of end2 = [agent-id] of g
+]) [
+set link-strength clamp01 (link-strength + random-float 0.08 - 0.04)
+]
 end
 
 to debris-persist [g]
-  ask ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g
-  ]) [
-    set link-strength clamp01 (link-strength - random-float 0.02)
-  ]
+ask ((graph-links g) with [
+[agent-id] of end1 = [agent-id] of g and
+[agent-id] of end2 = [agent-id] of g
+]) [
+set link-strength clamp01 (link-strength - random-float 0.02)
+]
 end
 
 ; ---------------------------------------------------------
@@ -649,219 +657,367 @@ end
 ; ---------------------------------------------------------
 
 to transition-checks
-  ask graph-agents [
-    compute-transition-metrics self
+let age ticks
+ask graph-agents [
+compute-transition-metrics self
 
-    if agent-kind = "tissue" [
-      if fsm-state = "reversible" and pruning-level > 0.5 [
-        set fsm-state "transitioning"
-      ]
-      if fsm-state = "transitioning" and pruning-level < 0.2 [
-        set fsm-state "reversible"
-      ]
-    ]
+if agent-kind = "tissue" [
+if fsm-state = "reversible" and (pruning-level >= 0.10 or age > 10) [
+set fsm-state "transitioning"
+]
+if fsm-state = "transitioning" and pruning-level < 0.05 and age <= 20 [
+set fsm-state "reversible"
+]
+]
 
-    if agent-kind = "imaginal" [
-      if fsm-state = "reversible" and commitment-score > 0.5 [
-        set fsm-state "transitioning"
-      ]
-      if fsm-state = "transitioning" and commitment-score < 0.2 [
-        set fsm-state "reversible"
-      ]
-    ]
-  ]
+if agent-kind = "imaginal" [
+if fsm-state = "reversible" and commitment-score >= 0.40 [
+set fsm-state "transitioning"
+]
+if fsm-state = "transitioning" and commitment-score < 0.15 [
+set fsm-state "reversible"
+]
+]
+]
 end
 
 to compute-transition-metrics [g]
-  let nodes graph-cells g
-  let edges graph-links g
+let nodes graph-cells g
+let edges graph-links g
 
-  ask g [
-    if agent-kind = "tissue" [
-      ifelse any? nodes
-        [ set pruning-level mean [stress] of nodes ]
-        [ set pruning-level 0 ]
-    ]
+ask g [
+if agent-kind = "tissue" [
+ifelse any? edges
+[ set pruning-level 1 - mean [link-strength] of edges ]
+[ set pruning-level 0 ]
+]
 
-    if agent-kind = "imaginal" [
-      ifelse any? nodes
-        [ set commitment-score mean [patterning-score + commitment-bias] of nodes ]
-        [ set commitment-score 0 ]
-    ]
+if agent-kind = "imaginal" [
+ifelse any? nodes
+[ set commitment-score mean [patterning-score + commitment-bias] of nodes ]
+[ set commitment-score 0 ]
+]
 
-    if agent-kind = "organizer" [
-      set organizer-activity count edges
-    ]
+if agent-kind = "organizer" [
+set organizer-activity count edges
+]
 
-    if agent-kind = "debris" [
-      ifelse any? edges
-        [ set cleanup-score 1 - mean [link-strength] of edges ]
-        [ set cleanup-score 1 ]
-    ]
-  ]
+if agent-kind = "debris" [
+ifelse any? edges
+[ set cleanup-score 1 - mean [link-strength] of edges ]
+[ set cleanup-score 1 ]
+]
+]
 end
 
 ; ---------------------------------------------------------
-; D. irreversible actions
+; D. agent-specific irreversible / update actions
 ; ---------------------------------------------------------
 
-to irreversible-actions
-  ask graph-agents with [agent-kind = "tissue" and fsm-state = "transitioning"] [
-    if pruning-level > 0.8 [
-      tissue-prune self
-      set fsm-state "irreversibly-reduced"
-    ]
-  ]
+to tissue-irreversible-actions
+let age ticks
 
-  ask graph-agents with [agent-kind = "imaginal" and fsm-state = "transitioning"] [
-    if commitment-score > 0.8 [
-      imaginal-commit self
-      set fsm-state "irreversibly-reduced"
-    ]
-  ]
+ask graph-agents with [agent-kind = "tissue" and fsm-state = "transitioning"] [
+if (pruning-level >= 0.18 or age > 25) [
+tissue-prune self
+set fsm-state "irreversibly-reduced"
+]
+]
 
-  ask graph-agents with [agent-kind = "tissue" and fsm-state = "irreversibly-reduced"] [
-    if count graph-cells self < 5 [
-      tissue-dissolve self
-      set fsm-state "removed"
-    ]
-  ]
+ask graph-agents with [agent-kind = "tissue" and fsm-state = "irreversibly-reduced"] [
+if absorbed-tissue-cells < target-tissue-absorbed-cells [
+if any? graph-cells self [
+tissue-dissolve-step self
+]
+]
+]
+
+ask graph-agents with [agent-kind = "tissue"] [
+if not any? graph-cells self [
+set fsm-state "removed"
+]
+]
+end
+
+to imaginal-irreversible-actions
+ask graph-agents with [agent-kind = "imaginal" and fsm-state = "transitioning"] [
+if commitment-score >= 0.7 [
+imaginal-commit self
+set fsm-state "irreversibly-reduced"
+]
+]
+end
+
+to organizer-irreversible-actions
+ask graph-agents with [agent-kind = "organizer"] [
+organizer-update self
+]
+end
+
+to debris-irreversible-actions
+ask graph-agents with [agent-kind = "debris"] [
+debris-update self
+]
 end
 
 to tissue-prune [g]
-  let doomed ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g and
-    link-strength < 0.3
-  ])
-  let n count doomed
+let doomed (graph-links g) with [link-strength < 0.5]
+let n count doomed
 
-  ask doomed [
-    set erasure-flag true
-    die
-  ]
+ask doomed [
+set erasure-flag true
+die
+]
 
-  ask g [
-    set erased-links-count erased-links-count + n
-    set landauer-heat landauer-heat + landauer-cost n
-  ]
+ask g [
+set erased-links-count erased-links-count + n
+set landauer-heat landauer-heat + landauer-cost n
+]
 
-  set irreversible-events-this-tick irreversible-events-this-tick + n
+set irreversible-events-this-tick irreversible-events-this-tick + n
 end
 
 to imaginal-commit [g]
-  let doomed ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g and
-    link-strength < 0.4
-  ])
-  let n count doomed
+let doomed ((graph-links g) with [
+[agent-id] of end1 = [agent-id] of g and
+[agent-id] of end2 = [agent-id] of g and
+link-strength < 0.4
+])
+let n count doomed
 
-  ask doomed [
-    set erasure-flag true
-    die
-  ]
+ask doomed [
+set erasure-flag true
+die
+]
 
-  ask g [
-    set erased-links-count erased-links-count + n
-    set landauer-heat landauer-heat + landauer-cost n
-  ]
+ask g [
+set erased-links-count erased-links-count + n
+set landauer-heat landauer-heat + landauer-cost n
+]
 
-  set irreversible-events-this-tick irreversible-events-this-tick + n
+set irreversible-events-this-tick irreversible-events-this-tick + n
 end
 
 to tissue-dissolve [g]
-  ask graph-cells g [
-    set agent-kind "debris"
-    set cell-type "debris"
-    recolor-cell
-  ]
+tissue-dissolve-step g
+end
 
-  ask g [
-    set agent-kind "debris"
-    set fsm-state "residual"
-  ]
+to tissue-dissolve-step [g]
+if absorbed-tissue-cells >= target-tissue-absorbed-cells [ stop ]
+
+let node-set graph-cells g
+if not any? node-set [ stop ]
+
+let mean-deg mean [count my-links] of node-set
+let mean-support mean [count link-neighbors with [agent-kind = "tissue"]] of node-set
+
+let candidate-set node-set with [
+(count my-links <= mean-deg) and
+(count link-neighbors with [agent-kind = "tissue"] <= mean-support)
+]
+
+if not any? candidate-set [
+set candidate-set node-set
+]
+
+let candidates sort candidate-set
+let remaining-cap target-tissue-absorbed-cells - absorbed-tissue-cells
+let n-to-dissolve min list remaining-cap (length candidates)
+
+if n-to-dissolve <= 0 [ stop ]
+
+let chosen sublist candidates 0 n-to-dissolve
+let organizer-slots max list 0 min list (target-organizer-converted-cells - organizer-converted-cells) (length chosen)
+
+if organizer-slots > 0 [
+foreach sublist chosen 0 organizer-slots [ c ->
+convert-tissue-cell-to-organizer c
+]
+]
+
+if organizer-slots < length chosen [
+foreach sublist chosen organizer-slots (length chosen) [ c ->
+convert-tissue-cell-to-debris c
+]
+]
+end
+
+to convert-tissue-cell-to-debris [c]
+let recipient nearest-active-graph-agent "debris" c
+if recipient = nobody [ stop ]
+let old-agent-id [agent-id] of c
+let doomed no-links
+ask c [
+set doomed my-links with [[agent-kind] of other-end != "debris"]
+]
+let n count doomed
+
+ask doomed [
+set erasure-flag true
+die
+]
+
+ask c [
+set agent-kind "debris"
+set cell-type "debris"
+set agent-id [agent-id] of recipient
+recolor-cell
+]
+
+ask recipient [
+if fsm-state = "absorbed" [ set fsm-state "residual" ]
+]
+
+ask graph-agents with [agent-id = old-agent-id] [
+set erased-links-count erased-links-count + n
+set landauer-heat landauer-heat + landauer-cost n
+]
+set irreversible-events-this-tick irreversible-events-this-tick + n
+set absorbed-tissue-cells absorbed-tissue-cells + 1
+end
+
+to convert-tissue-cell-to-organizer [c]
+let recipient nearest-active-graph-agent "organizer" c
+if recipient = nobody [ stop ]
+let old-agent-id [agent-id] of c
+let doomed no-links
+ask c [
+set doomed my-links with [[agent-kind] of other-end = "tissue"]
+]
+let n count doomed
+
+ask doomed [
+set erasure-flag true
+die
+]
+
+ask c [
+set agent-kind "organizer"
+set cell-type "organizer"
+set agent-id [agent-id] of recipient
+recolor-cell
+]
+
+organizer-relink-cell c recipient
+
+ask recipient [
+if fsm-state = "decayed" [ set fsm-state "active" ]
+if fsm-state = "basal" [ set fsm-state "active" ]
+]
+
+ask graph-agents with [agent-id = old-agent-id] [
+set erased-links-count erased-links-count + n
+set landauer-heat landauer-heat + landauer-cost n
+]
+set irreversible-events-this-tick irreversible-events-this-tick + n
+set absorbed-tissue-cells absorbed-tissue-cells + 1
+set organizer-converted-cells organizer-converted-cells + 1
+end
+
+to organizer-relink-cell [c recipient]
+ask c [
+let local-targets other cells in-radius 2 with [
+agent-id = [agent-id] of recipient and
+agent-kind = "organizer" and
+not link-neighbor? myself
+]
+let long-targets other cells with [
+agent-id != [agent-id] of recipient and
+member? agent-kind ["tissue" "imaginal" "organizer"] and
+distance myself > 2 and
+distance myself <= 6 and
+not link-neighbor? myself
+]
+
+if any? local-targets [
+ask n-of (min list 2 count local-targets) local-targets [
+ensure-cross-link-with c "signal" (0.20 + random-float 0.15)
+]
+]
+
+if any? long-targets and random-float 1.0 < 0.5 [
+ask one-of long-targets [
+ensure-cross-link-with c "signal" (0.10 + random-float 0.08)
+]
+]
+]
+end
+
+to-report nearest-active-graph-agent [kind c]
+let pool graph-agents with [agent-kind = kind and fsm-state != "removed" and fsm-state != "absorbed"]
+if not any? pool [ report nobody ]
+report min-one-of pool [distance c]
 end
 
 ; ---------------------------------------------------------
-; E. debris + organizer updates
+; E. organizer + debris updates
 ; ---------------------------------------------------------
-
-to debris-and-organizer-updates
-  ask graph-agents with [agent-kind = "organizer"] [
-    organizer-update self
-  ]
-
-  ask graph-agents with [agent-kind = "debris"] [
-    debris-update self
-  ]
-end
 
 to organizer-update [g]
-  if [fsm-state] of g = "basal" and random-float 1.0 < 0.05 [
-    ask g [ set fsm-state "active" ]
-  ]
+if [fsm-state] of g = "basal" and random-float 1.0 < 0.05 [
+ask g [ set fsm-state "active" ]
+]
 
-  if [fsm-state] of g = "active" [
-    organizer-broadcast g
-    if random-float 1.0 < 0.02 [
-      ask g [ set fsm-state "decayed" ]
-    ]
-  ]
+if [fsm-state] of g = "active" [
+organizer-broadcast g
+if random-float 1.0 < 0.02 [
+ask g [ set fsm-state "decayed" ]
+]
+]
 
-  if [fsm-state] of g = "decayed" and random-float 1.0 < 0.03 [
-    ask g [ set fsm-state "active" ]
-  ]
+if [fsm-state] of g = "decayed" and random-float 1.0 < 0.03 [
+ask g [ set fsm-state "active" ]
+]
 end
 
 to organizer-broadcast [g]
-  let organizer-nodes graph-cells g
-  if not any? organizer-nodes [ stop ]
+let organizer-nodes graph-cells g
+if not any? organizer-nodes [ stop ]
 
-  ask cells with [agent-kind = "tissue" or agent-kind = "imaginal"] [
-    let d min [distance myself] of organizer-nodes
-    if d <= 4 [
-      if agent-kind = "tissue"   [ set stress stress + 0.02 ]
-      if agent-kind = "imaginal" [ set patterning-score patterning-score + 0.02 ]
-    ]
-  ]
+ask cells with [agent-kind = "tissue" or agent-kind = "imaginal"] [
+let d min [distance myself] of organizer-nodes
+if d <= 4 [
+if agent-kind = "tissue" [ set stress stress + 0.02 ]
+if agent-kind = "imaginal" [ set patterning-score patterning-score + 0.02 ]
+]
+]
 end
 
 to debris-update [g]
-  if [fsm-state] of g = "residual" [
-    debris-breakdown g
-    compute-transition-metrics g
-    if [cleanup-score] of g > 0.7 [
-      debris-cleanup g
-      ask g [ set fsm-state "absorbed" ]
-    ]
-  ]
+if [fsm-state] of g = "residual" [
+debris-breakdown g
+compute-transition-metrics g
+if [cleanup-score] of g > 0.7 [
+debris-cleanup g
+ask g [ set fsm-state "absorbed" ]
+]
+]
 end
 
 to debris-breakdown [g]
-  let edges ((graph-links g) with [
-    [agent-id] of end1 = [agent-id] of g and
-    [agent-id] of end2 = [agent-id] of g
-  ])
+let edges ((graph-links g) with [
+[agent-id] of end1 = [agent-id] of g and
+[agent-id] of end2 = [agent-id] of g
+])
 
-  if any? edges [
-    ask one-of edges [
-      set erasure-flag true
-      die
-    ]
-    ask g [
-      set erased-links-count erased-links-count + 1
-      set landauer-heat landauer-heat + landauer-cost 1
-    ]
-    set irreversible-events-this-tick irreversible-events-this-tick + 1
-  ]
+if any? edges [
+ask one-of edges [
+set erasure-flag true
+die
+]
+ask g [
+set erased-links-count erased-links-count + 1
+set landauer-heat landauer-heat + landauer-cost 1
+]
+set irreversible-events-this-tick irreversible-events-this-tick + 1
+]
 end
 
 to debris-cleanup [g]
-  ask graph-cells g [
-    ask patch-here [ set occupied? false ]
-    die
-  ]
+ask graph-cells g [
+ask patch-here [ set occupied? false ]
+die
+]
 end
 
 ; ---------------------------------------------------------
@@ -869,68 +1025,69 @@ end
 ; ---------------------------------------------------------
 
 to heat-and-information-bookkeeping
-  ask graph-agents [
-    update-one-graph-agent-metrics self
-    update-one-graph-agent-heat self
-  ]
+ask graph-agents [
+update-one-graph-agent-metrics self
+update-one-graph-agent-heat self
+]
 
-  update-global-metrics
-  update-stabilization-flags
+update-global-metrics
+update-stabilization-flags
 end
 
 to update-one-graph-agent-metrics [g]
-  let nodes graph-cells g
-  let edges graph-links g
+let nodes graph-cells g
+let edges graph-links g
 
-  ask g [
-    nw:with-context nodes edges [
-      set graph-size (count nodes + count edges)
-      set graph-entropy estimate-graph-entropy nodes edges
-    ]
-  ]
+ask g [
+nw:with-context nodes edges [
+set graph-size (count nodes + count edges)
+set graph-entropy estimate-graph-entropy nodes edges
+]
+]
 end
 
 to update-one-graph-agent-heat [g]
-  let nodes graph-cells g
-  ask g [
-    set background-heat (count nodes) * background-noise-level * external-temperature
-  ]
+let nodes graph-cells g
+ask g [
+set background-heat (count nodes) * background-noise-level * external-temperature
+]
 end
 
 to update-global-metrics
-  set total-occupied-cells count cells
+set total-occupied-cells count cells
 
-  ifelse any? cells
-    [ set link-density (2 * count cell-links) / count cells ]
-    [ set link-density 0 ]
+ifelse any? cells
+[ set link-density (2 * count cell-links) / count cells ]
+[ set link-density 0 ]
 
-  ifelse any? graph-agents
-    [ set global-graph-entropy mean [graph-entropy] of graph-agents ]
-    [ set global-graph-entropy 0 ]
+ifelse any? graph-agents
+[ set global-graph-entropy mean [graph-entropy] of graph-agents ]
+[ set global-graph-entropy 0 ]
 
-  set cumulative-background-heat sum [background-heat] of graph-agents
-  set cumulative-erasure-heat sum [landauer-heat] of graph-agents
+set cumulative-background-heat sum [background-heat] of graph-agents
+set cumulative-erasure-heat sum [landauer-heat] of graph-agents
 
-  ifelse cumulative-background-heat > 0
-    [ set heat-ratio cumulative-erasure-heat / cumulative-background-heat ]
-    [ set heat-ratio 0 ]
+ifelse cumulative-background-heat > 0
+[ set heat-ratio cumulative-erasure-heat / cumulative-background-heat ]
+[ set heat-ratio 0 ]
 
-  set signed-cell-diff-total total-occupied-cells - initial-occupied-cells
+set signed-cell-diff-total total-occupied-cells - initial-occupied-cells
+set leftover-tissue-cells count cells with [agent-kind = "tissue"]
 end
 
 to update-stabilization-flags
-  set structural-stable?
-    (abs (total-occupied-cells - previous-total-occupied-cells) < 1) and
-    (abs (link-density - previous-link-density) < 0.01) and
-    (abs (global-graph-entropy - previous-global-graph-entropy) < 0.01)
+set structural-stable?
+(abs (total-occupied-cells - previous-total-occupied-cells) < 1) and
+(abs (link-density - previous-link-density) < 0.01) and
+(abs (global-graph-entropy - previous-global-graph-entropy) < 0.01)
 
-  set irreversible-stable? (irreversible-events-this-tick = 0)
-  set heat-stable? (abs (heat-ratio - previous-heat-ratio) < 0.01)
+set irreversible-stable? (irreversible-events-this-tick = 0)
+set heat-stable? (abs (heat-ratio - previous-heat-ratio) < 0.01)
 
-  set previous-total-occupied-cells total-occupied-cells
-  set previous-link-density link-density
-  set previous-global-graph-entropy global-graph-entropy
-  set previous-heat-ratio heat-ratio
+set previous-total-occupied-cells total-occupied-cells
+set previous-link-density link-density
+set previous-global-graph-entropy global-graph-entropy
+set previous-heat-ratio heat-ratio
 end
 
 ; ---------------------------------------------------------
@@ -938,38 +1095,40 @@ end
 ; ---------------------------------------------------------
 
 to-report graph-cells [g]
-  report cells with [agent-id = [agent-id] of g]
+report cells with [agent-id = [agent-id] of g and agent-kind = [agent-kind] of g]
 end
 
 to-report graph-links [g]
-  report cell-links with [
-    ([agent-id] of end1 = [agent-id] of g) or
-    ([agent-id] of end2 = [agent-id] of g)
-  ]
+report cell-links with [
+[agent-id] of end1 = [agent-id] of g and
+[agent-id] of end2 = [agent-id] of g and
+[agent-kind] of end1 = [agent-kind] of g and
+[agent-kind] of end2 = [agent-kind] of g
+]
 end
 
 to-report estimate-graph-entropy [nodes edges]
-  if not any? nodes [ report 0 ]
-  report ((count nodes) + (count edges)) * 0.01
+if not any? nodes [ report 0 ]
+report ((count nodes) + (count edges)) * 0.01
 end
 
 to-report landauer-cost [n-erased]
-  report n-erased * external-temperature
+report n-erased * external-temperature
 end
 
 to-report clamp01 [x]
-  report max list 0 min list 1 x
+report max list 0 min list 1 x
 end]]></code>
   <widgets>
     <view x="545" wrappingAllowedX="true" y="5" frameRate="30.0" minPycor="-16" height="434" showTickCounter="true" patchSize="13.0" fontSize="10" wrappingAllowedY="true" width="434" tickCounterLabel="ticks" maxPycor="16" updateMode="0" maxPxcor="16" minPxcor="-16"></view>
     <slider x="15" step="10" y="5" max="400" width="190" display="initial-total-occupied-cells" height="50" min="40" direction="Horizontal" default="400.0" variable="initial-total-occupied-cells"></slider>
     <slider x="213" step="1" y="5" max="8" width="150" display="n-tissue" height="50" min="1" direction="Horizontal" default="8.0" variable="n-tissue"></slider>
-    <slider x="370" step="2" y="5" max="40" width="155" display="temperature" height="50" min="20" direction="Horizontal" default="40.0" variable="temperature"></slider>
+    <slider x="370" step="0.05" y="5" max="0.75" width="155" display="tissue-absorbed" height="50" min="0.25" direction="Horizontal" default="0.75" variable="tissue-absorbed"></slider>
     <slider x="15" step="0.1" y="60" max="1" width="150" display="noise" height="50" min="0" direction="Horizontal" default="1.0" variable="noise"></slider>
     <slider x="170" step="0.1" y="60" max="1" width="150" display="cells-energy" height="50" min="0" direction="Horizontal" default="0.7" variable="cells-energy"></slider>
     <button x="15" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <button x="135" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="reset">reset</button>
-    <button x="75" y="165" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="go">go</button>
+    <button x="75" y="165" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55" display="go">go</button>
     <switch x="215" y="115" height="40" on="true" variable="l-organizer" width="91" display="l-organizer"></switch>
     <switch x="315" y="115" height="40" on="false" variable="l-debris" width="75" display="l-debris"></switch>
     <monitor x="1005" precision="17" y="10" height="60" fontSize="11" width="100" display="Cell counts">0</monitor>
@@ -983,8 +1142,9 @@ end]]></code>
       </pen>
     </plot>
     <switch x="15" y="115" height="40" on="true" variable="l-tissue" width="100" display="l-tissue"></switch>
-    <switch x="125" y="115" height="40" on="false" variable="l-imaginal" width="86" display="l-imaginal"></switch>
+    <switch x="125" y="115" height="40" on="true" variable="l-imaginal" width="86" display="l-imaginal"></switch>
     <button x="405" y="115" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="100">refresh-links</button>
+    <monitor x="1225" precision="0" y="10" height="60" fontSize="11" width="100" display="Tissue cells">leftover-tissue-cells</monitor>
   </widgets>
   <info>## WHAT IS IT?
 
