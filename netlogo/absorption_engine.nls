@@ -1,0 +1,292 @@
+; =========================================================
+; absorption_engine.nls
+; Global absorption controller driven by absorption-rate
+; Tissue absorption may reorganize into organizer
+; =========================================================
+
+
+to stage-absorb
+  if remaining-tissue-absorption-cap <= 0 [ stop ]
+
+  let eligible cells with [agent-kind = "tissue" and absorbable-cell?]
+  if not any? eligible [ stop ]
+
+  let quota min list
+    remaining-tissue-absorption-cap
+    max list 1 ceiling (absorption-rate * count eligible)
+
+  let chosen n-of (min list quota count eligible) eligible
+
+  ask chosen [
+    absorb-selected-tissue-cell
+  ]
+end
+
+
+to absorb-selected-tissue-cell
+  if agent-kind != "tissue" [ stop ]
+  if remaining-tissue-absorption-cap <= 0 [ stop ]
+
+  let this-cell self
+  let old-agent one-of graph-agents with [
+    agent-id = [agent-id] of this-cell and
+    agent-kind = "tissue"
+  ]
+  if old-agent = nobody [ stop ]
+
+  let doomed my-links
+  let n count doomed
+
+  ask doomed [
+    set erasure-flag true
+    die
+  ]
+
+  let convert-to-organizer? (organizer-converted-cells < target-organizer-converted-cells)
+
+  if convert-to-organizer? [
+    let organizer-recipient nearest-graph-agent-of-kind "organizer" this-cell
+
+    if organizer-recipient != nobody [
+      set origin-agent-id agent-id
+      set agent-id [agent-id] of organizer-recipient
+      set agent-kind "organizer"
+      set cell-type "organizer"
+      set regime-tag "broadcasting"
+      set stress 0
+      set patterning-score 0.35
+      set commitment-bias 0.60
+      set energy-budget max list energy-budget (0.50 * initial-energy-per-cell)
+      set absorbable? false
+      set prunable? false
+      set pending-delete? false
+      set node-erasure-flag false
+      recolor-cell
+
+      set organizer-converted-cells organizer-converted-cells + 1
+      reconnect-new-organizer-cell
+    ]
+
+    if organizer-recipient = nobody [
+      reroute-self-to-debris
+    ]
+  ]
+
+  if not convert-to-organizer? [
+    reroute-self-to-debris
+  ]
+
+  ask old-agent [
+    set erased-links-count erased-links-count + n
+    set erased-nodes-count erased-nodes-count + 1
+    set landauer-heat landauer-heat + landauer-cost (n + 1)
+  ]
+
+  register-tissue-absorption
+  set irreversible-events-this-tick irreversible-events-this-tick + n + 1
+end
+
+
+to reroute-self-to-debris
+  let debris-recipient nearest-graph-agent-of-kind "debris" self
+
+  if debris-recipient != nobody [
+    set origin-agent-id agent-id
+    set agent-id [agent-id] of debris-recipient
+    set agent-kind "debris"
+    set cell-type "debris"
+    set regime-tag "residual"
+    set stress clamp01 (stress + 0.10)
+    set energy-budget max list 0 (energy-budget - 0.10 * initial-energy-per-cell)
+    set absorbable? false
+    set prunable? false
+    set pending-delete? false
+    set node-erasure-flag false
+    recolor-cell
+  ]
+
+  if debris-recipient = nobody [
+    ask patch-here [ set occupied? false ]
+    die
+  ]
+end
+
+
+to reconnect-new-organizer-cell
+  if agent-kind != "organizer" [ stop ]
+
+  let nearby-organizers other cells in-radius 3 with [
+    agent-kind = "organizer" and
+    not link-neighbor? myself
+  ]
+
+  if any? nearby-organizers [
+    ask n-of (min list 2 count nearby-organizers) nearby-organizers [
+      ensure-internal-link-with myself "signal" (0.45 + random-float 0.15)
+    ]
+  ]
+
+  let nearby-targets other cells in-radius 4 with [
+    member? agent-kind ["tissue" "imaginal"] and
+    not link-neighbor? myself
+  ]
+
+  if any? nearby-targets [
+    ask n-of (min list 2 count nearby-targets) nearby-targets [
+      ensure-cross-link-with myself "signal" (0.25 + random-float 0.10)
+    ]
+  ]
+end
+
+
+to-report absorbable-cell?
+  let energy-val energy-budget
+  let stress-val stress
+  let deg count my-links
+  let same-neigh count link-neighbors with [agent-kind = "tissue"]
+
+  report (
+    energy-val < (0.35 * initial-energy-per-cell) or
+    stress-val > 0.60 or
+    deg <= 1 or
+    same-neigh <= 1
+  )
+end
+
+
+to-report remaining-tissue-absorption-cap
+  report max list 0 (target-tissue-absorbed-cells - absorbed-tissue-cells)
+end
+
+
+to register-tissue-absorption
+  if absorbed-tissue-cells < target-tissue-absorbed-cells [
+    set absorbed-tissue-cells absorbed-tissue-cells + 1
+  ]
+end
+
+
+to stabilize-remaining-tissue
+  if tissue-restabilized? [ stop ]
+
+  let survivors cells with [agent-kind = "tissue"]
+  if not any? survivors [
+    set tissue-restabilized? true
+    stop
+  ]
+
+  ask survivors [
+    let near-tissue other survivors in-radius 2 with [not link-neighbor? myself]
+
+    if count my-links = 0 and any? near-tissue [
+      ask n-of (min list 3 count near-tissue) near-tissue [
+        ensure-internal-link-with myself "reciprocal" (0.70 + random-float 0.20)
+      ]
+    ]
+  ]
+
+  ask survivors [
+    let near-tissue other survivors in-radius 2 with [not link-neighbor? myself]
+
+    if count my-links = 1 and any? near-tissue [
+      ask n-of (min list 2 count near-tissue) near-tissue [
+        ensure-internal-link-with myself "reciprocal" (0.65 + random-float 0.20)
+      ]
+    ]
+  ]
+
+  ask survivors [
+    let mid-tissue other survivors in-radius 3 with [not link-neighbor? myself]
+
+    if count my-links < 2 and any? mid-tissue [
+      ask one-of mid-tissue [
+        ensure-internal-link-with myself "shortcut" (0.55 + random-float 0.20)
+      ]
+    ]
+  ]
+
+  ask survivors [
+    set absorbable? false
+    set prunable? false
+    set pending-delete? false
+    set node-erasure-flag false
+    set stress 0
+    recolor-cell
+  ]
+
+  set tissue-restabilized? true
+end
+
+
+to stabilize-organizer
+  ask cells with [agent-kind = "organizer" and count my-links < 2] [
+    let local-targets other cells in-radius 3 with [
+      agent-kind = "organizer" and
+      not link-neighbor? myself
+    ]
+    if any? local-targets [
+      ask n-of (min list 2 count local-targets) local-targets [
+        ensure-internal-link-with myself "signal" (0.25 + random-float 0.15)
+      ]
+    ]
+
+    let external-targets other cells in-radius 5 with [
+      member? agent-kind ["tissue" "imaginal"] and
+      not link-neighbor? myself
+    ]
+    if any? external-targets and count my-links < 3 [
+      ask one-of external-targets [
+        ensure-cross-link-with myself "signal" (0.15 + random-float 0.10)
+      ]
+    ]
+  ]
+
+  ask cells with [agent-kind = "organizer"] [
+    if count my-links >= 2 [
+      set stress max list 0 (stress - 0.02)
+    ]
+    recolor-cell
+  ]
+end
+
+
+to stabilize-imaginal
+  ask cells with [agent-kind = "imaginal" and count my-links < 3] [
+    let local-targets other cells in-radius 2 with [
+      agent-kind = "imaginal" and
+      not link-neighbor? myself
+    ]
+    if any? local-targets [
+      ask n-of (min list 2 count local-targets) local-targets [
+        ensure-internal-link-with myself "patterning" (0.45 + random-float 0.20)
+      ]
+    ]
+  ]
+
+  ask cells with [agent-kind = "imaginal"] [
+    set patterning-score clamp01 (patterning-score + 0.01)
+    set commitment-bias clamp01 (commitment-bias + 0.005)
+    recolor-cell
+  ]
+end
+
+
+to cleanup-debris-fully
+  ask cell-links with [
+    [agent-kind] of end1 = "debris" or
+    [agent-kind] of end2 = "debris"
+  ] [
+    set erasure-flag true
+    die
+  ]
+
+  ask cells with [agent-kind = "debris"] [
+    ask patch-here [ set occupied? false ]
+    die
+  ]
+end
+
+
+to stabilize-debris
+  cleanup-debris-fully
+end

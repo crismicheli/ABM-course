@@ -1,0 +1,131 @@
+; =========================================================
+; reversible_dynamics.nls
+; Reversible updates with frozen tissue and no link growth
+; for imaginal/organizer
+; =========================================================
+
+to stage-rewire-reversible
+  reversible-local-updates
+end
+
+
+to reversible-local-updates
+  ask graph-agents [
+    if agent-kind = "tissue" [ tissue-reversible-update self ]
+    if agent-kind = "imaginal" [ imaginal-reversible-update self ]
+    if agent-kind = "organizer" [ organizer-reversible-update self ]
+    if agent-kind = "debris" [ debris-reversible-update self ]
+  ]
+end
+
+
+to tissue-reversible-update [g]
+  if tissue-restabilized? [ stop ]
+
+  let nodes graph-cells g
+  let edges graph-links g
+  if not any? nodes [ stop ]
+
+  ask nodes [
+    let thermal-kick (background-noise-level * external-temperature)
+    set local-state local-state + one-of [-1 0 1]
+    set stress clamp01 (stress + 0.15 * thermal-kick + 0.10 * (1 - (energy-budget / initial-energy-per-cell)))
+    set energy-budget max list 0 (energy-budget - (0.02 + 0.03 * thermal-kick + 0.02 * stress))
+    recolor-cell
+  ]
+
+  ask edges [
+    let jitter ((random-float 0.08) - 0.04)
+    set link-strength clamp01 (link-strength + jitter - 0.04 * [fragility-score] of g)
+  ]
+
+  tissue-rewire-step g
+end
+
+
+to imaginal-reversible-update [g]
+  let nodes graph-cells g
+  let edges graph-links g
+  if not any? nodes [ stop ]
+
+  ask nodes [
+    let thermal-kick (0.5 * background-noise-level * external-temperature)
+    set patterning-score clamp01 (patterning-score + random-float 0.05 + 0.05 * [organizer-activity] of g)
+    set commitment-bias clamp01 (commitment-bias + random-float 0.03)
+    set stress clamp01 (stress + 0.05 * thermal-kick)
+    set energy-budget max list 0 (energy-budget - (0.01 + 0.02 * thermal-kick + 0.01 * commitment-bias))
+    recolor-cell
+  ]
+
+  ask edges [
+    set link-strength link-strength
+  ]
+end
+
+
+to organizer-reversible-update [g]
+  let nodes graph-cells g
+  let edges graph-links g
+  if not any? nodes [ stop ]
+
+  ask nodes [
+    let thermal-kick (0.4 * background-noise-level * external-temperature)
+    set patterning-score clamp01 (patterning-score + 0.03 + random-float 0.03)
+    set stress clamp01 (stress + 0.03 * thermal-kick)
+    set energy-budget max list 0 (energy-budget - (0.01 + 0.01 * count my-links))
+    recolor-cell
+  ]
+
+  ask edges [
+    set link-strength link-strength
+  ]
+end
+
+
+to debris-reversible-update [g]
+  let nodes graph-cells g
+  if not any? nodes [ stop ]
+
+  ask nodes [
+    set stress 0
+    recolor-cell
+  ]
+end
+
+
+; ---------------------------------------------------------
+; Rewiring / reshuffling
+; ---------------------------------------------------------
+
+to tissue-rewire-step [g]
+  if tissue-restabilized? [ stop ]
+
+  let nodes graph-cells g
+  if count nodes < 3 [ stop ]
+
+  let attempts max list 1 round (count nodes * 0.05)
+  repeat attempts [
+    let a one-of nodes
+    if a != nobody [
+      let b one-of other nodes with [not link-neighbor? a]
+      if b != nobody and random-float 1.0 < (0.20 + 0.30 * [fragility-score] of g) [
+        ask a [ ensure-internal-link-with b "shortcut" (0.35 + random-float 0.25) ]
+      ]
+    ]
+  ]
+end
+
+
+to imaginal-rewire-step [g]
+  stop
+end
+
+
+to organizer-rewire-step [g]
+  stop
+end
+
+
+to debris-reshuffle-step [g]
+  stop
+end

@@ -1,0 +1,15 @@
+; =========================================================
+; scheduler_stop.nls
+; Sequential scheduler helpers and global stop criterion
+; No FSM logic
+; =========================================================
+
+
+to stage-environment
+  ask cells [
+    set noise-level background-noise-level
+  ]
+end
+
+
+

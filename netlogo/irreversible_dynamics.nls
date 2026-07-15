@@ -1,0 +1,206 @@
+; =========================================================
+; irreversible_dynamics.nls
+; Irreversible pruning without post-stabilization tissue drift
+; =========================================================
+
+to irreversible-network-updates
+  ask graph-agents [
+    if agent-kind = "tissue" [ tissue-irreversible-update self ]
+    if agent-kind = "imaginal" [ imaginal-irreversible-update self ]
+    if agent-kind = "organizer" [ organizer-irreversible-update self ]
+  ]
+end
+
+
+to tissue-irreversible-update [g]
+  if tissue-restabilized? [ stop ]
+
+  let nodes graph-cells g
+  if not any? nodes [ stop ]
+
+  if [pruning-level] of g > 0.45 or [fragility-score] of g > 0.55 [
+    tissue-prune-weak-edges g
+  ]
+
+  if [absorbability-score] of g > 0.60 [
+    tissue-mark-peripheral-nodes-absorbable g
+  ]
+end
+
+
+to imaginal-irreversible-update [g]
+  let nodes graph-cells g
+  let edges graph-links g
+  if not any? nodes [ stop ]
+
+  if [commitment-score] of g > 0.65 and any? edges [
+    imaginal-prune-incoherent-edges g
+  ]
+end
+
+
+to organizer-irreversible-update [g]
+  let edges graph-links g
+  if not any? graph-cells g [ stop ]
+
+  if [fragility-score] of g > 0.70 and any? edges [
+    organizer-prune-decayed-signal-edges g
+  ]
+end
+
+
+; ---------------------------------------------------------
+; Tissue irreversible operations
+; ---------------------------------------------------------
+
+to tissue-prune-weak-edges [g]
+  let doomed (graph-links g) with [
+    link-strength < (0.35 + 0.20 * [fragility-score] of g)
+  ]
+
+  let quota max list 1 floor (count doomed * 0.15)
+  if count doomed > quota [
+    set doomed n-of quota doomed
+  ]
+
+  prune-edge-set doomed g
+end
+
+
+to tissue-mark-peripheral-nodes-absorbable [g]
+  let nodes graph-cells g
+  if not any? nodes [ stop ]
+
+  let candidate-set nodes with [
+    count my-links <= 1 or
+    energy-budget < (0.20 * initial-energy-per-cell) or
+    stress > 0.75
+  ]
+
+  if not any? candidate-set [ stop ]
+
+  ask candidate-set [
+    set absorbable? true
+    set stress clamp01 (stress + 0.02)
+    set pending-delete? false
+    set node-erasure-flag false
+  ]
+end
+
+
+; ---------------------------------------------------------
+; Imaginal irreversible operations
+; ---------------------------------------------------------
+
+to imaginal-prune-incoherent-edges [g]
+  let doomed (graph-links g) with [
+    link-strength < 0.30 and link-type = "patterning"
+  ]
+
+  let quota max list 1 floor (count doomed * 0.25)
+  if count doomed > quota [
+    set doomed n-of quota doomed
+  ]
+
+  prune-edge-set doomed g
+end
+
+
+; ---------------------------------------------------------
+; Organizer irreversible operations
+; ---------------------------------------------------------
+
+to organizer-prune-decayed-signal-edges [g]
+  let doomed (graph-links g) with [
+    link-type = "signal" and link-strength < 0.20
+  ]
+
+  let quota max list 1 floor (count doomed * 0.30)
+  if count doomed > quota [
+    set doomed n-of quota doomed
+  ]
+
+  prune-edge-set doomed g
+end
+
+
+; ---------------------------------------------------------
+; Generic irreversible helpers
+; ---------------------------------------------------------
+
+to prune-edge-set [edge-set g]
+  if not any? edge-set [ stop ]
+  let n count edge-set
+
+  ask edge-set [
+    set erasure-flag true
+    set irreversible-op? true
+    die
+  ]
+
+  ask g [
+    set erased-links-count erased-links-count + n
+    set landauer-heat landauer-heat + landauer-cost n
+  ]
+
+  set irreversible-events-this-tick irreversible-events-this-tick + n
+end
+
+
+to prune-isolated-node [c g]
+  if c = nobody [ stop ]
+
+  ask c [
+    ask patch-here [ set occupied? false ]
+    die
+  ]
+
+  ask g [
+    set erased-nodes-count erased-nodes-count + 1
+    set landauer-heat landauer-heat + landauer-cost 1
+  ]
+
+  set irreversible-events-this-tick irreversible-events-this-tick + 1
+end
+
+
+to-report nearest-graph-agent-of-kind [kind c]
+  let pool graph-agents with [agent-kind = kind]
+  if not any? pool [ report nobody ]
+  report min-one-of pool [distance c]
+end
+
+
+to-report landauer-cost [n]
+  report n * 0.693
+end
+
+
+; ---------------------------------------------------------
+; Stage entry points
+; ---------------------------------------------------------
+
+to stage-prune-irreversible
+  if not tissue-restabilized? [
+    ask cells with [agent-kind = "tissue"] [
+      set absorbable? false
+    ]
+
+    ask graph-agents with [agent-kind = "tissue"] [
+      tissue-irreversible-update self
+    ]
+  ]
+
+  ask graph-agents with [agent-kind = "imaginal"] [
+    imaginal-irreversible-update self
+  ]
+
+  ask graph-agents with [agent-kind = "organizer"] [
+    organizer-irreversible-update self
+  ]
+end
+
+
+to stage-organizer-and-debris
+  ; debris cleanup is handled inside absorption_engine.nls
+end

@@ -1,0 +1,172 @@
+; =========================================================
+; viz_output.nls
+; Visualization + heat accounting layer
+; =========================================================
+;
+; Heat strategy 1 implemented:
+;   - erasure / Landauer heat = irreversible events * k_B T ln 2
+;   - background heat = active cells * noise coefficient * minimal noise heat
+;
+; Future strategies are stubbed and routed through a selector reporter.
+; This file assumes the plots already exist in the Interface with:
+;   Plot "Heat balance" pens: "background" "erasure"
+;   Plot "Entropy" pens: "global" "tissue" "imaginal" "organizer" "debris"
+;
+; If you later want a chooser for heat strategy, add a global UI variable
+; such as heat-strategy and replace default-heat-strategy reporter.
+
+; ---------------------------------------------------------
+; Constants / strategy routing
+; ---------------------------------------------------------
+
+
+to-report default-heat-strategy
+  report 1
+end
+
+to-report selected-heat-strategy
+  ; Replace later with a chooser-backed global, e.g. report heat-strategy
+  report default-heat-strategy
+end
+
+; ---------------------------------------------------------
+; Setup / stage entry points
+; ---------------------------------------------------------
+
+to initialize-plots
+  set-current-plot "Heat balance"
+  clear-plot
+  set-current-plot-pen "background"
+  plot 0
+  set-current-plot-pen "erasure"
+  plot 0
+
+  set-current-plot "Entropy"
+  clear-plot
+  set-current-plot-pen "global"
+  plot 0
+  set-current-plot-pen "tissue"
+  plot 0
+  set-current-plot-pen "imaginal"
+  plot 0
+  set-current-plot-pen "organizer"
+  plot 0
+  set-current-plot-pen "debris"
+  plot 0
+end
+
+to stage-visualization
+  update-heat-balance
+  update-entropy-plot
+end
+
+; ---------------------------------------------------------
+; Heat accounting
+; ---------------------------------------------------------
+
+to update-heat-balance
+  let delta-erasure compute-erasure-heat
+  let delta-background compute-background-heat
+
+  set cumulative-erasure-heat cumulative-erasure-heat + delta-erasure
+  set cumulative-background-heat cumulative-background-heat + delta-background
+  set cumulative-total-heat cumulative-erasure-heat + cumulative-background-heat
+
+  ask graph-agents [
+    set background-heat background-heat + graph-agent-background-heat self
+  ]
+
+  set-current-plot "Heat balance"
+  set-current-plot-pen "background"
+  plot cumulative-background-heat
+
+  set-current-plot-pen "erasure"
+  plot cumulative-erasure-heat
+end
+
+to-report compute-erasure-heat
+  if selected-heat-strategy = 1 [
+    report compute-erasure-heat-strategy-1
+  ]
+
+  report compute-erasure-heat-strategy-1
+end
+
+to-report compute-background-heat
+  if selected-heat-strategy = 1 [
+    report compute-background-heat-strategy-1
+  ]
+
+  report compute-background-heat-strategy-1
+end
+
+to-report compute-erasure-heat-strategy-1
+  ; irreversible-events-this-tick is already maintained by the main dynamics
+  ; and counts deleted links + deleted nodes this tick
+  report irreversible-events-this-tick * minimal-landauer-heat
+end
+
+to-report compute-background-heat-strategy-1
+  ; total active nodes * background noise coefficient * minimal noise heat
+  report count cells * background-noise-level * minimal-noise-heat
+end
+
+to-report graph-agent-background-heat [g]
+  if selected-heat-strategy = 1 [
+    report graph-agent-background-heat-strategy-1 g
+  ]
+
+  report graph-agent-background-heat-strategy-1 g
+end
+
+to-report graph-agent-background-heat-strategy-1 [g]
+  let n count graph-cells g
+  report n * background-noise-level * minimal-noise-heat
+end
+
+; ---------------------------------------------------------
+; Strategy stubs for future extension
+; ---------------------------------------------------------
+
+to-report compute-erasure-heat-strategy-2
+  ; Stub: weighted irreversible events
+  report compute-erasure-heat-strategy-1
+end
+
+to-report compute-background-heat-strategy-2
+  ; Stub: topology-weighted noise heating
+  report compute-background-heat-strategy-1
+end
+
+to-report compute-erasure-heat-strategy-3
+  ; Stub: entropy-drop-linked dissipation
+  report compute-erasure-heat-strategy-1
+end
+
+to-report compute-background-heat-strategy-3
+  ; Stub: local-state / energy-budget dependent heating
+  report compute-background-heat-strategy-1
+end
+
+; ---------------------------------------------------------
+; Entropy plotting
+; ---------------------------------------------------------
+
+to update-entropy-plot
+  set-current-plot "Entropy"
+
+  set-current-plot-pen "global"
+  plot global-graph-entropy
+
+  set-current-plot-pen "tissue"
+  plot tissue-entropy-total
+
+  set-current-plot-pen "imaginal"
+  plot imaginal-entropy-total
+
+  set-current-plot-pen "organizer"
+  plot organizer-entropy-total
+
+  set-current-plot-pen "debris"
+  plot debris-entropy-total
+end
