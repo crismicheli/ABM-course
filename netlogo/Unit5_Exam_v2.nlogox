@@ -220,8 +220,8 @@ end]]></code>
     <button x="135" y="270" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="reset">reset</button>
     <button x="75" y="270" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55" display="go">go</button>
     <button x="15" y="270" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
-    <slider x="15" step="0.05" y="115" max="0.75" width="155" display="tissue-absorbed" height="50" min="0.25" direction="Horizontal" default="0.5" variable="tissue-absorbed"></slider>
-    <slider x="15" step="0.1" y="60" max="1" width="155" display="noise" height="50" min="0" direction="Horizontal" default="1.0" variable="noise"></slider>
+    <slider x="15" step="0.05" y="115" max="0.75" width="155" display="tissue-absorbed" height="50" min="0.25" direction="Horizontal" default="0.75" variable="tissue-absorbed"></slider>
+    <slider x="15" step="0.1" y="60" max="1" width="155" display="noise" height="50" min="0" direction="Horizontal" default="0.4" variable="noise"></slider>
     <slider x="180" step="0.005" y="115" max="0.05" width="150" display="absorption-rate" height="50" min="0.0005" direction="Horizontal" default="0.005" variable="absorption-rate"></slider>
     <slider x="175" step="0.1" y="60" max="1" width="155" display="cells-energy" height="50" min="0" direction="Horizontal" default="0.7" variable="cells-energy"></slider>
     <slider x="15" step="10" y="5" max="1000" width="190" display="initial-total-occupied-cells" height="50" min="40" direction="Horizontal" default="640.0" variable="initial-total-occupied-cells"></slider>
