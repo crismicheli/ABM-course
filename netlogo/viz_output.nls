@@ -9,8 +9,8 @@
 ; - Plot "Heat balance" exists with pens: "background" "erasure"
 ; - Plot "Entropy" exists with pens:
 ;     "global" "tissue" "imaginal" "organizer" "debris"
-; - cumulative-background-heat, cumulative-erasure-heat,
-;   cumulative-total-heat, and entropy totals are updated elsewhere
+; - background-heat-this-tick, landauer-heat-this-tick,
+;   and entropy totals are updated elsewhere
 ;   before visualization runs.
 
 
@@ -19,7 +19,7 @@
 ; ---------------------------------------------------------
 
 to initialize-plots
-  set-current-plot "Heat balance"
+  set-current-plot "Background Heat"
   clear-plot
   set-current-plot-pen "background"
   plot 0
@@ -27,6 +27,13 @@ to initialize-plots
   set-current-plot "Landau Heat"
   clear-plot
   set-current-plot-pen "erasure"
+  plot 0
+  
+  set-current-plot "Landau Heat per cell"
+  clear-plot
+  set-current-plot-pen "per-total-cells"
+  plot 0
+  set-current-plot-pen "per-residual-cells"
   plot 0
   
   set-current-plot "Entropy"
@@ -52,18 +59,29 @@ to stage-visualization
   update-background-heat-plot
   update-landau-heat-plot
   update-entropy-plot
+  update-landau-heat-per-cell-plot
 end
 
 to update-background-heat-plot
-  set-current-plot "Heat balance"
+  set-current-plot "Background Heat"
   set-current-plot-pen "background"
-  plot cumulative-background-heat
+  plot background-heat-this-tick
 end
 
 to update-landau-heat-plot
   set-current-plot "Landau Heat"
   set-current-plot-pen "erasure"
-  plot cumulative-erasure-heat
+  plot landauer-heat-this-tick
+end
+
+to update-landau-heat-per-cell-plot
+  set-current-plot "Landau Heat per cell"
+
+  set-current-plot-pen "per-total-cells"
+  plot landauer-heat-per-total-cell-this-tick
+
+  set-current-plot-pen "per-residual-cells"
+  plot landauer-heat-per-residual-tissue-cell-this-tick  
 end
 
 

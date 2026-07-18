@@ -56,6 +56,8 @@ globals [
   organizer-conversion-fraction
   target-organizer-converted-cells
   organizer-converted-cells
+  total-cells-present
+  total-links-present
   leftover-tissue-cells
 
   total-occupied-cells
@@ -66,9 +68,10 @@ globals [
   organizer-entropy-total
   debris-entropy-total
 
-  cumulative-background-heat
-  cumulative-erasure-heat
-  cumulative-total-heat
+  background-heat-this-tick
+  landauer-heat-this-tick
+  landauer-heat-total
+  ;cumulative-total-heat
   heat-ratio
   signed-cell-diff-total
 
@@ -183,6 +186,7 @@ to go
   ]
 
   set irreversible-events-this-tick 0
+  set landauer-heat-this-tick 0
 
   stage-environment ; scheduler_stop.nls
   stage-measure-pre ; network-metrics
@@ -217,31 +221,25 @@ end]]></code>
     <switch x="215" y="175" height="40" on="true" variable="l-organizer" width="91" display="l-organizer"></switch>
     <switch x="315" y="175" height="40" on="false" variable="l-debris" width="75" display="l-debris"></switch>
     <switch x="125" y="175" height="40" on="true" variable="l-imaginal" width="86" display="l-imaginal"></switch>
-    <button x="135" y="270" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="reset">reset</button>
     <button x="75" y="270" height="40" disableUntilTicks="false" forever="true" kind="Observer" width="55" display="go">go</button>
-    <button x="15" y="270" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
     <slider x="15" step="0.05" y="115" max="0.75" width="155" display="tissue-absorbed" height="50" min="0.25" direction="Horizontal" default="0.75" variable="tissue-absorbed"></slider>
     <slider x="15" step="0.1" y="60" max="1" width="155" display="noise" height="50" min="0" direction="Horizontal" default="1.0" variable="noise" units="1 = 37° C"></slider>
-    <slider x="180" step="0.005" y="115" max="0.05" width="150" display="absorption-rate" height="50" min="0.0005" direction="Horizontal" default="0.005" variable="absorption-rate"></slider>
-    <slider x="175" step="0.1" y="60" max="1" width="155" display="cells-energy" height="50" min="0" direction="Horizontal" default="0.7" variable="cells-energy"></slider>
-    <slider x="15" step="10" y="5" max="1000" width="190" display="initial-total-occupied-cells" height="50" min="40" direction="Horizontal" default="640.0" variable="initial-total-occupied-cells"></slider>
-    <slider x="213" step="1" y="5" max="8" width="150" display="n-tissue" height="50" min="1" direction="Horizontal" default="8.0" variable="n-tissue"></slider>
+    <slider x="180" step="0.005" y="115" max="0.05" width="150" display="absorption-rate" height="50" min="0.0005" direction="Horizontal" default="5.0E-4" variable="absorption-rate"></slider>
+    <slider x="175" step="0.1" y="60" max="1" width="155" display="cells-energy" height="50" min="0" direction="Horizontal" default="1.0" variable="cells-energy"></slider>
+    <slider x="15" step="10" y="5" max="1000" width="190" display="initial-total-occupied-cells" height="50" min="40" direction="Horizontal" default="800.0" variable="initial-total-occupied-cells"></slider>
+    <slider x="213" step="1" y="5" max="8" width="150" display="n-tissue" height="50" min="1" direction="Horizontal" default="6.0" variable="n-tissue"></slider>
     <monitor x="1065" precision="0" y="5" height="60" fontSize="11" width="100" display="Tissue cells">leftover-tissue-cells</monitor>
-    <monitor x="955" precision="17" y="5" height="60" fontSize="11" width="100" display="Links">0</monitor>
-    <monitor x="845" precision="17" y="5" height="60" fontSize="11" width="100" display="Cell counts">0</monitor>
-    <plot x="845" autoPlotX="true" yMax="1.0E-8" autoPlotY="true" yAxis="heat (Joule)" y="75" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="230" xAxis="ticks" display="Heat balance">
+    <monitor x="955" precision="17" y="5" height="60" fontSize="11" width="100" display="Links">total-links-present</monitor>
+    <monitor x="845" precision="17" y="5" height="60" fontSize="11" width="100" display="Cells">total-cells-present</monitor>
+    <plot x="845" autoPlotX="true" yMax="1.0E-21" autoPlotY="true" yAxis="heat (Joule)" y="75" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="230" xAxis="ticks" display="Background Heat">
       <setup></setup>
       <update></update>
       <pen interval="1.0" mode="0" display="background" color="-6459832" legend="true">
         <setup></setup>
         <update></update>
       </pen>
-      <pen interval="1.0" mode="0" display="ratio" color="-16777216" legend="true">
-        <setup></setup>
-        <update></update>
-      </pen>
     </plot>
-    <plot x="1080" autoPlotX="true" yMax="10.0" autoPlotY="true" yAxis="E per cell type" y="75" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="230" xAxis="ticks" display="Entropy">
+    <plot x="1080" autoPlotX="true" yMax="10.0" autoPlotY="true" yAxis="E per cell type" y="75" xMin="0.0" height="175" legend="true" xMax="10.0" yMin="0.0" xAxis="ticks" display="Entropy" width="280" sizeVersion="0">
       <setup></setup>
       <update></update>
       <pen interval="1.0" mode="0" display="global" color="-16777216" legend="true">
@@ -252,20 +250,21 @@ end]]></code>
         <setup></setup>
         <update></update>
       </pen>
-      <pen interval="1.0" mode="0" display="imaginal" color="-13791810" legend="true">
+      <pen interval="1.0" mode="0" display="imaginal" color="-13791810" legend="false">
         <setup></setup>
         <update></update>
       </pen>
-      <pen interval="1.0" mode="0" display="organizer" color="-2674135" legend="true">
+      <pen interval="1.0" mode="0" display="organizer" color="-2674135" legend="false">
         <setup></setup>
         <update></update>
       </pen>
-      <pen interval="1.0" mode="0" display="debris" color="-7500403" legend="true">
+      <pen interval="1.0" mode="0" display="debris" color="-7500403" legend="false">
         <setup></setup>
         <update></update>
       </pen>
     </plot>
-    <plot x="845" autoPlotX="true" yMax="1.0E-14" autoPlotY="true" yAxis="heat (Joule)" y="255" xMin="0.0" height="175" legend="false" xMax="10.0" yMin="0.0" width="230" xAxis="ticks" display="Landau Heat">
+    <button x="15" y="270" height="40" disableUntilTicks="false" forever="false" kind="Observer" width="55" display="setup">setup</button>
+    <plot x="845" autoPlotX="true" yMax="1.0E-21" autoPlotY="true" yAxis="heat (Joule)" y="255" xMin="0.0" height="205" legend="false" xMax="10.0" yMin="0.0" width="230" xAxis="ticks" display="Landau Heat">
       <setup></setup>
       <update></update>
       <pen interval="1.0" mode="0" display="erasure" color="-2674135" legend="true">
@@ -273,42 +272,81 @@ end]]></code>
         <update></update>
       </pen>
     </plot>
+    <plot x="1080" autoPlotX="true" yMax="1.0E-21" autoPlotY="true" yAxis="heat (joule/cell)" y="255" xMin="0.0" height="205" legend="true" xMax="10.0" yMin="0.0" width="280" xAxis="ticks" display="Landau Heat per cell">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="per-total-cells" color="-16777216" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+      <pen interval="1.0" mode="0" display="per-residual-cells" color="-11085214" legend="true">
+        <setup></setup>
+        <update></update>
+      </pen>
+    </plot>
   </widgets>
   <info>## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This model describes a simplified pupal metamorphosis process as a set of interacting tissue and signal networks embedded in a hexagonal lattice of cells. Each agent is a network of cells and reciprocal links; agents do not move, but their internal states and connectivity patterns change over time. The scope is to compare reversible exploratory dynamics (state changes and link-strength fluctuations that preserve options) with irreversible erasure dynamics (link deletions and collapse of developmental options) and to track how much modeled Landauer-type erasure heat is generated relative to background heat from thermal and biological noise. The model is intentionally coarse-grained: it does not aim to reproduce detailed biochemistry of metamorphosis, but instead focuses on the information-theoretic and thermodynamic structure of tissue reconfiguration during the transition from larval to adult form. 
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+The model represents metamorphic tissue reorganization as a set of interacting cell networks embedded in a hexagonal lattice. Each agent is a graph made of cells and reciprocal links rather than a single moving turtle, so the main dynamics come from changes in local connectivity, stress, energy, and graph structure over time.  
+There are four kinds of graph-agents: tissue, imaginal, organizer, and debris. Tissue graphs are the main structures that can rewire, weaken, fragment, and be absorbed; imaginal graphs persist and reorganize with relatively limited irreversible loss; organizer graphs influence surrounding structure; and debris graphs represent residual fragments that can later be cleaned up.   
+At each tick, the model updates environmental conditions, measures current graph properties, applies **reversible** rewiring, and then applies **irreversible** updates such as pruning, deletion, and absorption. Reversible updates change connectivity without removing structure, while irreversible updates delete links or nodes and therefore contribute to modeled Landauer-type erasure heat. The model tracks graph-level properties such as size, entropy, cohesion, fragility, absorbability, pruning level, and organizer activity. These quantities help determine when a graph remains structurally stable, when it becomes easier to absorb or prune, and how much the overall tissue organization is changing during the run.  
+Two heat channels are recorded. **Background heat** represents ongoing cellular activity and depends on the number of cells, noise level, stress, and energy load, whereas **Landauer-type heat** is generated only by irreversible deletion events. The key comparison in the model is therefore not just absolute heat, but the changing relation between background heat and irreversible heat as graph structure changes.  
+The simulation stops when the target amount of tissue absorption has been reached and the system has stabilized. Stabilization is defined in terms of small changes in occupied cells, link density, graph entropy, and heat ratio, together with the absence of new irreversible events.
+
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+Use **setup** to create the initial lattice, seed the graph-agents, build the starting network topologies, and initialize all plots and bookkeeping variables. Use **go** to run the model continuously and press it again to stop the model temporarily.  
+Before running the model, choose values for the main control variables that shape tissue restructuring and heat production. The most important inputs are background noise, initial energy per cell, the target percentage of tissue cells to be absorbed, and the number or relative proportion of graph-agents in the world.  
+Use the parameter controls to compare different structural and thermodynamic regimes. Runs can differ because of changes in absorption rate, absorbed-cell target, initial energy, noise, number of graphs, and total occupied cells, so these should be varied systematically rather than one at a time only by intuition.  
+  
+- **Background noise**: increases stochastic activity and raises the baseline contribution to background heat.  
+- **Initial energy per cell**: changes the energy budget of cells and therefore affects stress, absorbability, and background heat load.  
+- **Target absorbed tissue cells**: sets the stopping goal for tissue absorption and helps define when the transition has progressed far enough to compare runs.
+- **Number of graphs**: changes the initial organization of tissue, imaginal, organizer, and debris structures.
+- **Total occupied cells**: changes the total system size and therefore the scale of both structural complexity and total heat generation.
+
+Watch the plots and monitors while the model runs. The most useful outputs are total occupied cells, link density, graph entropy, absorbed tissue cells, leftover tissue cells, background heat, and Landauer heat.  
+
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+- How quickly tissue graphs lose cells and links compared to imaginal and organizer graphs, and how this shows up as changes in link density and graph entropy over time.
+
+- When large bursts of irreversible events (pruning, dissolution, absorption) occur, and how these bursts coincide with spikes in Landauer-type heat.
+
+- How background heat rises with higher noise and stress even when there are few irreversible events, and how the heat ratio (Landauer heat / background heat) responds.
+
+- Whether different initial graph structures or numbers of graphs reach stabilization with similar total heat but different heat ratios and leftover tissue cells.
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+A useful basic experiment is to keep total cells fixed while changing graph structure (**n-tissue**), and then keep graph structure similar while changing noise or energy. This makes it easier to test the model hypothesis that irreversible shape change and graph organization alter the relation between background heat and irreversible Landauer heat.
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+- Increase the total number of cells to test how well the model scales.
+
+- Vary the proportions of tissue, imaginal, organizer, and debris cells to test how composition changes the results.
+
+- Give different cell types different energy distributions instead of one shared energy setting.
 
 ## NETLOGO FEATURES
 
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+This model uses the *nw* extension to represent tissues as explicit networks of cells and links rather than as isolated agents. It also uses separate *breeds* for cells, graph-agents, and cell-links, which makes it possible to track both local cell behavior and higher-level graph properties in the same model.
+
+The code is split into several included files for topology setup, reversible dynamics, irreversible dynamics, absorption, scheduling, visualization, and metric bookkeeping. This modular structure makes the model easier to read and supports graph-level measures such as entropy, link density, stabilization, and heat tracking during the run.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+This is inspired by examples of different network types that use the extension *nw*
 
 ## CREDITS AND REFERENCES
-
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+This is part of a future pubblication for a Biosystems special issue on code biology (Micheli et al. 2027).
 </info>
   <turtleShapes>
     <shape name="default" rotatable="true" editableColorIndex="0">

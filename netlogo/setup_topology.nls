@@ -1,6 +1,6 @@
 
 ; VERSION NOTE:
-; This v2 patch adds GRAPH HELPERS directly to setup_topology.nls so that
+; This version adds GRAPH HELPERS directly to setup_topology.nls so that
 ; first-pass network instantiation can compile and run without depending on
 ; network_metrics.nls for graph membership reporters.
 ;
@@ -56,7 +56,7 @@ to setup-globals
   set prop-tissue 0.60
   set prop-imaginal 0.20
   set prop-organizer 0.10
-  set prop-debris 0.10
+  set prop-debris 0.10 
 
   set tissue-dissolve-rate absorption-rate
   set organizer-conversion-fraction 0.50
@@ -75,9 +75,10 @@ to setup-globals
   set organizer-entropy-total 0
   set debris-entropy-total 0
 
-  set cumulative-background-heat 0
-  set cumulative-erasure-heat 0
-  set cumulative-total-heat 0
+  set background-heat-this-tick 0
+  set landauer-heat-this-tick 0
+  ;set landauer-heat-total 0
+  ;set cumulative-total-heat 0
   set heat-ratio 0
   set signed-cell-diff-total 0
 

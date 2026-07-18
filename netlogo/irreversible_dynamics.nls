@@ -192,6 +192,7 @@ to prune-edge-set [edge-set g]
     set landauer-heat landauer-heat + q
   ]
 
+  set landauer-heat-this-tick landauer-heat-this-tick + q
   set irreversible-events-this-tick irreversible-events-this-tick + n
 end
 
@@ -210,6 +211,7 @@ to prune-isolated-node [c g]
     set landauer-heat landauer-heat + q
   ]
 
+  set landauer-heat-this-tick landauer-heat-this-tick + q
   set irreversible-events-this-tick irreversible-events-this-tick + 1
 end
 

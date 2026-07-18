@@ -79,13 +79,16 @@ to absorb-selected-tissue-cell
     reroute-self-to-debris
   ]
 
+  let q-total (q-links + q-node)
+  
   ask old-agent [
     set erased-links-count erased-links-count + n
     set erased-nodes-count erased-nodes-count + 1
-    set landauer-heat landauer-heat + q-links + q-node
+    set landauer-heat landauer-heat + q-total
   ]
-
+  
   register-tissue-absorption
+  set landauer-heat-this-tick landauer-heat-this-tick + q-total
   set irreversible-events-this-tick irreversible-events-this-tick + n + 1
 end
 
