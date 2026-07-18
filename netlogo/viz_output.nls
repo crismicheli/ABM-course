@@ -1,33 +1,18 @@
 ; =========================================================
 ; viz_output.nls
-; Visualization + heat accounting layer
+; Visualization layer
+; Uses already-maintained heat values from network_metrics.nls
+; and irreversible dynamics modules.
 ; =========================================================
 ;
-; Heat strategy 1 implemented:
-;   - erasure / Landauer heat = irreversible events * k_B T ln 2
-;   - background heat = active cells * noise coefficient * minimal noise heat
-;
-; Future strategies are stubbed and routed through a selector reporter.
-; This file assumes the plots already exist in the Interface with:
-;   Plot "Heat balance" pens: "background" "erasure"
-;   Plot "Entropy" pens: "global" "tissue" "imaginal" "organizer" "debris"
-;
-; If you later want a chooser for heat strategy, add a global UI variable
-; such as heat-strategy and replace default-heat-strategy reporter.
+; ASSUMPTIONS
+; - Plot "Heat balance" exists with pens: "background" "erasure"
+; - Plot "Entropy" exists with pens:
+;     "global" "tissue" "imaginal" "organizer" "debris"
+; - cumulative-background-heat, cumulative-erasure-heat,
+;   cumulative-total-heat, and entropy totals are updated elsewhere
+;   before visualization runs.
 
-; ---------------------------------------------------------
-; Constants / strategy routing
-; ---------------------------------------------------------
-
-
-to-report default-heat-strategy
-  report 1
-end
-
-to-report selected-heat-strategy
-  ; Replace later with a chooser-backed global, e.g. report heat-strategy
-  report default-heat-strategy
-end
 
 ; ---------------------------------------------------------
 ; Setup / stage entry points
@@ -38,9 +23,12 @@ to initialize-plots
   clear-plot
   set-current-plot-pen "background"
   plot 0
+
+  set-current-plot "Landau Heat"
+  clear-plot
   set-current-plot-pen "erasure"
   plot 0
-
+  
   set-current-plot "Entropy"
   clear-plot
   set-current-plot-pen "global"
@@ -55,98 +43,29 @@ to initialize-plots
   plot 0
 end
 
+; ---------------------------------------------------------
+; Heat plotting
+; ---------------------------------------------------------
+
 to stage-visualization
-  update-heat-balance
+  refresh-all-network-metrics
+  update-background-heat-plot
+  update-landau-heat-plot
   update-entropy-plot
 end
 
-; ---------------------------------------------------------
-; Heat accounting
-; ---------------------------------------------------------
-
-to update-heat-balance
-  let delta-erasure compute-erasure-heat
-  let delta-background compute-background-heat
-
-  set cumulative-erasure-heat cumulative-erasure-heat + delta-erasure
-  set cumulative-background-heat cumulative-background-heat + delta-background
-  set cumulative-total-heat cumulative-erasure-heat + cumulative-background-heat
-
-  ask graph-agents [
-    set background-heat background-heat + graph-agent-background-heat self
-  ]
-
+to update-background-heat-plot
   set-current-plot "Heat balance"
   set-current-plot-pen "background"
   plot cumulative-background-heat
+end
 
+to update-landau-heat-plot
+  set-current-plot "Landau Heat"
   set-current-plot-pen "erasure"
   plot cumulative-erasure-heat
 end
 
-to-report compute-erasure-heat
-  if selected-heat-strategy = 1 [
-    report compute-erasure-heat-strategy-1
-  ]
-
-  report compute-erasure-heat-strategy-1
-end
-
-to-report compute-background-heat
-  if selected-heat-strategy = 1 [
-    report compute-background-heat-strategy-1
-  ]
-
-  report compute-background-heat-strategy-1
-end
-
-to-report compute-erasure-heat-strategy-1
-  ; irreversible-events-this-tick is already maintained by the main dynamics
-  ; and counts deleted links + deleted nodes this tick
-  report irreversible-events-this-tick * minimal-landauer-heat
-end
-
-to-report compute-background-heat-strategy-1
-  ; total active nodes * background noise coefficient * minimal noise heat
-  report count cells * background-noise-level * minimal-noise-heat
-end
-
-to-report graph-agent-background-heat [g]
-  if selected-heat-strategy = 1 [
-    report graph-agent-background-heat-strategy-1 g
-  ]
-
-  report graph-agent-background-heat-strategy-1 g
-end
-
-to-report graph-agent-background-heat-strategy-1 [g]
-  let n count graph-cells g
-  report n * background-noise-level * minimal-noise-heat
-end
-
-; ---------------------------------------------------------
-; Strategy stubs for future extension
-; ---------------------------------------------------------
-
-to-report compute-erasure-heat-strategy-2
-  ; Stub: weighted irreversible events
-  report compute-erasure-heat-strategy-1
-end
-
-to-report compute-background-heat-strategy-2
-  ; Stub: topology-weighted noise heating
-  report compute-background-heat-strategy-1
-end
-
-to-report compute-erasure-heat-strategy-3
-  ; Stub: entropy-drop-linked dissipation
-  report compute-erasure-heat-strategy-1
-end
-
-to-report compute-background-heat-strategy-3
-  ; Stub: local-state / energy-budget dependent heating
-  report compute-background-heat-strategy-1
-end
 
 ; ---------------------------------------------------------
 ; Entropy plotting

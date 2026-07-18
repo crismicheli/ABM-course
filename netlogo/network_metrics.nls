@@ -1,15 +1,17 @@
-
 ; =========================================================
 ; network_metrics.nls
 ; Pure network-property and bookkeeping layer
-; Aligned with heat strategy 1
+; Refactored for:
+;   - physically interpretable background heat
+;   - 5-minute tick duration
+;   - all heat values stored in joules
 ; =========================================================
 ;
 ; PURPOSE
 ; - compute graph-level structural metrics from cells + links
 ; - compute per-graph and global entropy summaries
-; - keep graph-agent background heat aligned with strategy 1
-; - define Landauer and noise heat scales directly in this module
+; - compute graph-agent background heat from calibrated cell power
+; - define Landauer scale directly in this module
 ; - update stabilization flags from metric deltas only
 ; - provide continuous scores used by rewiring, pruning,
 ;   organizer influence, and absorption modules
@@ -21,8 +23,8 @@
 ;     landauer-heat on graph-agents
 ;     irreversible-events-this-tick globally
 ; - this module does not control state transitions
-;
- 
+
+
 ; =========================================================
 ; HEAT SCALE REPORTERS
 ; =========================================================
@@ -45,10 +47,63 @@ to-report minimal-landauer-heat
 end
 
 
-to-report minimal-noise-heat
-  ; requested formula:
-  ; minimal-noise-heat = 100 * noise * minimal-landauer-heat
-  report 100 * noise * minimal-landauer-heat * 1e18
+to-report seconds-per-tick
+  report 300
+end
+
+
+to-report basal-power-per-cell-w
+  ; Typical trial values:
+  ; 5e-12 = 5 pW / cell
+  ; 3e-11 = 30 pW / cell
+  ; 1e-10 = 100 pW / cell
+  report 5e-13
+end
+
+
+to-report basal-heat-per-cell-per-tick
+  report basal-power-per-cell-w * seconds-per-tick
+end
+
+
+to-report noise-heat-multiplier
+  report 1 + (0.5 * noise)
+end
+
+
+to-report stress-heat-multiplier [nodes]
+  if not any? nodes [ report 1 ]
+  report 1 + (0.75 * clamp01 (mean [stress] of nodes))
+end
+
+
+to-report energy-load-heat-multiplier [nodes]
+  if not any? nodes [ report 1 ]
+
+  let load 0
+  if initial-energy-per-cell > 0 [
+    set load mean
+      [ clamp01 ((initial-energy-per-cell - energy-budget) / initial-energy-per-cell) ]
+      of nodes
+  ]
+
+  report 1 + (0.75 * load)
+end
+
+
+to-report graph-background-heat [g]
+  let nodes graph-cells g
+  let node-count count nodes
+
+  if node-count = 0 [ report 0 ]
+
+  report (
+    node-count
+    * basal-heat-per-cell-per-tick
+    * noise-heat-multiplier
+    * stress-heat-multiplier nodes
+    * energy-load-heat-multiplier nodes
+  )
 end
 
 
@@ -144,14 +199,8 @@ end
 
 
 to update-one-graph-agent-heat [g]
-  let node-count count graph-cells g
-
   ask g [
-    ; requested formula:
-    ; background heat depends only on graph cell count and global noise
-    set background-heat (
-      node-count * noise * minimal-noise-heat
-    )
+    set background-heat graph-background-heat self
   ]
 end
 
@@ -221,7 +270,7 @@ to update-stabilization-flags
   set irreversible-stable? (irreversible-events-this-tick = 0)
 
   set heat-stable? (
-    abs (cumulative-total-heat - (cumulative-background-heat + cumulative-erasure-heat)) < 1e-18
+    abs (heat-ratio - previous-heat-ratio) < 0.01
   )
 
   if structural-stable? and irreversible-stable? and heat-stable? [

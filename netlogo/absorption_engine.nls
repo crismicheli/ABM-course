@@ -2,6 +2,7 @@
 ; absorption_engine.nls
 ; Global absorption controller driven by absorption-rate
 ; Tissue absorption may reorganize into organizer
+; Refactored for effective-bit Landauer accounting
 ; =========================================================
 
 
@@ -36,6 +37,8 @@ to absorb-selected-tissue-cell
 
   let doomed my-links
   let n count doomed
+  let q-links landauer-cost-for-links doomed
+  let q-node landauer-cost-for-node this-cell
 
   ask doomed [
     set erasure-flag true
@@ -79,7 +82,7 @@ to absorb-selected-tissue-cell
   ask old-agent [
     set erased-links-count erased-links-count + n
     set erased-nodes-count erased-nodes-count + 1
-    set landauer-heat landauer-heat + landauer-cost (n + 1)
+    set landauer-heat landauer-heat + q-links + q-node
   ]
 
   register-tissue-absorption

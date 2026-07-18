@@ -1,6 +1,8 @@
 ; =========================================================
 ; irreversible_dynamics.nls
 ; Irreversible pruning without post-stabilization tissue drift
+; Refactored for effective-bit Landauer accounting
+; with phenomenological overhead above the Landauer minimum
 ; =========================================================
 
 to irreversible-network-updates
@@ -125,12 +127,59 @@ end
 
 
 ; ---------------------------------------------------------
+; Effective-bit reporters
+; ---------------------------------------------------------
+
+to-report bits-erased-per-link [lnk]
+  report 0.1 + (0.9 * [link-strength] of lnk)
+end
+
+
+to-report bits-erased-per-node [c]
+  let degree count [my-links] of c
+  let degree-term min list 3 degree
+  let stress-term [stress] of c
+  let pattern-term [patterning-score] of c
+
+  report 1 + degree-term + stress-term + pattern-term
+end
+
+
+to-report irreversible-overhead-factor
+  ; Coarse-grained dissipative cost above the Landauer minimum.
+  ; Increase if erasure heat is still visually negligible.
+  ; Typical trial values: 1e9, 1e10, 1e12
+  report 1e4 ;10e6
+end
+
+
+to-report landauer-cost-for-links [edge-set]
+  if not any? edge-set [ report 0 ]
+  let total-bits sum [bits-erased-per-link self] of edge-set
+  report total-bits * minimal-landauer-heat * irreversible-overhead-factor
+end
+
+
+to-report landauer-cost-for-node [c]
+  if c = nobody [ report 0 ]
+  report (bits-erased-per-node c) * minimal-landauer-heat * irreversible-overhead-factor
+end
+
+
+to-report landauer-cost [n]
+  ; Backward-compatible fallback
+  report n * minimal-landauer-heat * irreversible-overhead-factor
+end
+
+
+; ---------------------------------------------------------
 ; Generic irreversible helpers
 ; ---------------------------------------------------------
 
 to prune-edge-set [edge-set g]
   if not any? edge-set [ stop ]
   let n count edge-set
+  let q landauer-cost-for-links edge-set
 
   ask edge-set [
     set erasure-flag true
@@ -140,7 +189,7 @@ to prune-edge-set [edge-set g]
 
   ask g [
     set erased-links-count erased-links-count + n
-    set landauer-heat landauer-heat + landauer-cost n
+    set landauer-heat landauer-heat + q
   ]
 
   set irreversible-events-this-tick irreversible-events-this-tick + n
@@ -149,6 +198,7 @@ end
 
 to prune-isolated-node [c g]
   if c = nobody [ stop ]
+  let q landauer-cost-for-node c
 
   ask c [
     ask patch-here [ set occupied? false ]
@@ -157,7 +207,7 @@ to prune-isolated-node [c g]
 
   ask g [
     set erased-nodes-count erased-nodes-count + 1
-    set landauer-heat landauer-heat + landauer-cost 1
+    set landauer-heat landauer-heat + q
   ]
 
   set irreversible-events-this-tick irreversible-events-this-tick + 1
@@ -168,11 +218,6 @@ to-report nearest-graph-agent-of-kind [kind c]
   let pool graph-agents with [agent-kind = kind]
   if not any? pool [ report nobody ]
   report min-one-of pool [distance c]
-end
-
-
-to-report landauer-cost [n]
-  report n * 0.693
 end
 
 
